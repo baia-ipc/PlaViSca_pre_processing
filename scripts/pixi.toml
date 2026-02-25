@@ -1,0 +1,20 @@
+[workspace]
+authors = ["Sopheap15 <sopheap15@gmail.com>"]
+channels = ["conda-forge", "bioconda", "r", "default"]
+name = "pre_process_data"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+r-base = "4.3.*"
+r-tidyverse = "*"
+r-seurat = "*"
+bioconductor-dropletutils = "*"
+bioconductor-scater = "*"
+bioconductor-singlecellexperiment = "*"
+bioconductor-rtracklayer = "*"
+bioconductor-genomeinfodbdata = "*"
+bioconductor-singler = "*"
+r-sccustomize = ">=3.2.0,<4"

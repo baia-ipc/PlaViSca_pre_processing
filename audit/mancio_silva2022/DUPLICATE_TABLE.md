@@ -2,7 +2,7 @@
 
 30 records in 15 pairs. Full original IDs are preserved, including `.1`. Counts agree over all 5,934 source RNA features; absent upstream features are zero in the compared source cells. Upstream column indices are 1-based. No cells have been deleted.
 
-This table is generated from `exact_duplicate_trace.tsv`, which also records processed barcode tokens, source positions, associated matrices, comparison metrics and pre-capture status. The source `.1` copies have no separately identifiable upstream column. The two day-5 array columns are separately named upstream but identical over all 85,578 genes; separate column names do not prove independent biological cells.
+This table is generated from `exact_duplicate_trace.tsv`, which also records processed barcode tokens, source positions, associated matrices, comparison metrics and pre-capture status. The 14 `.1` pairs are proven duplicate representations of single upstream GEO count columns; the mechanism creating the copies remains unknown. The two day-5 array columns are separately named upstream but identical over all 85,578 genes; biological independence is not demonstrated and this pair remains unresolved. The proposed policy in `AUDIT.md` would remove only the 14 `.1` copies from a future analytic object and flag the day-5 pair for a separate decision without selecting a survivor; it has not been applied.
 
 | duplicate_group | source_cell_id | table_cell | orig.ident | orig.ident1 | Sample | Day | Treatment | State | sex.state | geo_accession | associated_runs | upstream_column | independently_identifiable_upstream |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -2,9 +2,12 @@
 
 Audit date: 2026-09-19. Status: inspection complete; repairs proposed, not applied.
 
-Preprocessing branch: `plavisca-audit-fixes`; HEAD: `e5b3de5cfaa93d4e1a6ed8c8c4722dbcf1ec9144`.
-No pipeline scripts, source data, application objects, branches, or commits were changed.
-Only this audit directory and its evidence files were created. R inspections used
+Preprocessing branch: `plavisca-audit-fixes`. Production-code baseline:
+`e5b3de5cfaa93d4e1a6ed8c8c4722dbcf1ec9144`; this is not the current audit-branch HEAD.
+The branch contains audit-only commits `b1b9962` and `4e34a94`, recording the report
+and supporting evidence. No production pipeline scripts, source data or application
+objects were changed. The present documentation revision is not committed.
+Changes are confined to this audit directory and its evidence files. R inspections used
 `env -u R_LIBS_USER pixi run Rscript --vanilla` from `pre_process_data/scripts`.
 Runtime: R 4.3.3, Seurat 5.3.0, SeuratObject 5.2.0, readxl 1.4.5.
 
@@ -195,18 +198,24 @@ schizonts. This does not validate those inferences. Source State, source referen
 similarity labels and PlaViSca predictions must remain separate. A blanket conversion
 of Replicative to mature Schizont is not justified solely by source State.
 
-## New source-data uncertainty: repeated count profiles
+## Repeated count profiles: conclusions from completed upstream tracing
 
-All 14 `.1` pairs have exactly identical RNA count vectors across all 5,934 genes,
-as well as matching audited annotations. For their Table S2 rows only UMAP coordinates
-differ. Additionally, Infection2 d5 cells `D5Seq1_CCCCGATTGACG` and
-`D5Seq2_CCCCGATTGACG` have identical RNA count vectors despite different source groups.
+All 14 same-group `.1` pairs are **proven duplicate representations of single
+upstream GEO count columns**. Both source Seurat records in each pair match the
+same upstream column across all 5,934 RNA genes. The mechanism that created the
+second representation between the deposited upstream matrices and final authors'
+object remains unknown; intent and the exact processing operation are not proven.
+PlaViSca preserved these duplicate representations unchanged.
 
-These observations require examination of original count matrices/processing or
-author clarification. They raise a potential repeated-cell/pseudoreplication problem;
-they do not by themselves establish the correct deduplication rule. Do not delete
-cells or present all 1,494 as independently validated biological observations yet.
-The current proposed mapping retains the deposited cell inventory for audit purposes.
+The cross-array pair `D5Seq1_CCCCGATTGACG` / `D5Seq2_CCCCGATTGACG` remains
+**unresolved**. Two separately named upstream GEO columns exist, but their full
+85,578-feature host-plus-parasite count profiles are identical. Biological
+independence is not demonstrated. No survivor is selected for this pair.
+
+The detailed upstream evidence is recorded in the focused duplicate-tracing
+section and `exact_duplicate_trace.tsv`. All 1,494 deposited records remain
+preserved for provenance and source-to-final comparison. The proposed future
+analytic-inclusion policy below is separate from this unchanged source inventory.
 
 ## Exact proposed changes to silva.R (not applied)
 
@@ -275,7 +284,8 @@ The current proposed mapping retains the deposited cell inventory for audit purp
     in the parasite-group accession mapping before writing silva2022.rds.
 14. Emit provenance (source checksums, metadata authority, crosswalk evidence and
     unresolved flags). Fail rather than silently recycling or introducing unknown
-    source categories. Leave duplication flags in audit evidence pending resolution.
+    source categories. Preserve duplicate evidence and flags; apply any future analytic
+    inclusion change only through the separately reviewed policy below.
 
 ## Downstream regeneration and remaining decisions
 
@@ -292,12 +302,36 @@ that expression or embeddings require recomputation; cell removal or count chang
 would. Current reports of metadata correction must not be confused with integration
 validation. Nothing has been regenerated in this audit.
 
-Open questions: repeated count profiles; per-run capture role and true physical
-instrument for Infection2; per-infection parasite province/donor provenance; precise
-cell/read contribution from each associated run; source-to-final artifact lineage;
-and appropriate separation of source versus inferred lifecycle labels. These do
-not prevent source-keyed day/treatment correction, but do prevent declaring the
-whole study publication-ready.
+Open questions: the unknown mechanism creating the 14 proven `.1` duplicate
+representations; the origin and biological independence of the unresolved day-5
+cross-array pair; per-run capture role and true physical instrument for Infection2;
+per-infection parasite province/donor provenance; precise cell/read contribution
+from each associated run; and the validity and applicability of inferred lifecycle
+labels. Source-to-final cell identity, raw counts and comparable normalized
+expression are resolved by the completed lineage checks. The historical script
+state reproducing the observed metadata is identified; the exact executed build
+and date remain unverified without a build manifest or the central object. These
+remaining uncertainties do not prevent source-keyed day/treatment correction,
+but do prevent declaring the whole study publication-ready.
+
+### Proposed analytic-inclusion policy (not applied)
+
+- Preserve all 1,494 deposited records and their original identifiers in the source
+  inventory and audit crosswalk. Do not alter the deposited object or application
+  artifacts in this documentation update.
+- In a future analytic object, remove the 14 terminal `.1` copies identified in
+  `exact_duplicate_trace.tsv`, retaining their corresponding unsuffixed records.
+  This rule applies to these 14 proven duplicate representations, not to suffixes
+  in general. Record each exclusion, its retained counterpart and the shared
+  upstream GEO column in an explicit inclusion/exclusion manifest.
+- Flag both `D5Seq1_CCCCGATTGACG` and `D5Seq2_CCCCGATTGACG` for a separate reviewed
+  decision. Do not select a survivor or claim that they are independent biological
+  cells. Removing only the 14 proven copies would leave 1,480 records, including
+  this unresolved pair; 1,480 is not a validated independent-cell count.
+- If this policy is approved and implemented later, regenerate affected analytic
+  objects and downstream analyses from the responsible upstream step, validate
+  the exclusion manifest and resulting cell inventory, and document the separate
+  decision for the day-5 pair. No exclusion or regeneration has been applied.
 
 Validation after correction: not applicable because no correction was applied.
 Inspection validation is recorded in `validation.txt`. One initial inspection
@@ -501,7 +535,8 @@ missing; the audited experimental annotations and count profiles agree. In Table
 S2 the paired parasite rows differ only in UMAP coordinates. Neither member is
 independently represented in Table S2's host sheet under the corresponding key.
 
-**Proven:** the multiplicity changes from one named upstream count column to two
+**Proven:** all 14 `.1` pairs are duplicate representations of single upstream
+GEO count columns. The multiplicity changes from one named upstream count column to two
 records in the authors' deposited final Seurat object and parasite metadata table;
 PlaViSca preserves both count columns unchanged. Distinct-array identity is not
 supported for these 14 pairs. Infection1 is post-capture only, excluding a simple
@@ -558,9 +593,11 @@ Raw-read/UMI-level analysis or author clarification is needed to resolve this.
 | Separate pre/post representations of one cell | Not supported by deposited column identities; Infection1 has only post data | No matching called pre-capture column; simple two-representation explanation unsupported |
 | Introduced by PlaViSca count export | Excluded by exact source/final count concordance | Excluded by exact source/final count concordance |
 
-No deduplication or correction has been performed. The results justify flagging
-these observations and locating the responsible upstream step, not silently
-choosing a survivor or treating all record labels as independent biological cells.
+No deduplication or correction has been performed. The proposed analytic-inclusion
+policy removes the 14 proven `.1` copies from a future analytic object while
+preserving the full deposited inventory. The mechanism producing those copies
+remains unknown. The day-5 cross-array pair remains flagged for a separate
+decision: no survivor is chosen and biological independence is not demonstrated.
 
 ### Reproducibility and remaining limits
 

@@ -26,3 +26,14 @@ they contain original production paths and save operations. Run only the
 
 This package does not contain repairs to production code or regenerated
 production datasets.
+
+## Shared-pipeline consolidation audit
+
+Once all six study-specific audits (this package plus `hazzard2024/`,
+`ruberto2022_1/`, and `ruberto2022_2/`, with the Sa2020 and Hazzard2022
+sections recorded inside this package's `AUDIT.md`) were complete, a
+separate cross-study consolidation audit was performed at
+[`../shared_pipeline/AUDIT.md`](../shared_pipeline/AUDIT.md). It builds the
+authoritative defect register, the shared-mechanism analysis for
+`singleR.R`/`integration.R`/`flatten_data.R`, the target metadata schema, and
+the staged repair plan. Start there before beginning any repair work.

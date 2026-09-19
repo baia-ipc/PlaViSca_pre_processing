@@ -774,6 +774,202 @@ mapping. This disagrees strongly with the observed candidate bridge and with
 author sample aliases and counts/read evidence before assigning corrected IDs;
 otherwise same-token coincidences can create false annotation matches.
 
+### Sa2020 full forensic audit
+
+**Completed 2026-09-19; this section supersedes the preliminary Sa2020
+qualifications above.** Scope was restricted to Sa et al. 2020 (PMID 32365102).
+No production script, source matrix, study object, integrated object or app data
+was changed. The new files in this audit directory are evidence or reproducible
+audit code only: `audit_sa2020.R`, `download_sa2020_evidence.sh`, the
+`sa2020_*.tsv` outputs, `sa2020_article.xml`, the three publisher workbooks, the
+ENA run snapshot, and `sa2020_authoritative_sha256.txt`.
+
+The authoritative snapshots are the Europe PMC full-text XML for PMC7224573,
+the ENA PRJNA603327 run report, and publisher supplements S1 Data (Fig 1), S5
+Data (Fig 5) and S7 Data (the relaxed-cutoff PCA). Their SHA-256 values are
+recorded in `sa2020_authoritative_sha256.txt`. The locally used
+`data/pbio.3000711.s034.xlsx` and the fresh publisher S5 Data download have the
+same MD5, `03ad55660ba413d7bd8b6140e98c6397`.
+
+#### Exact sample/run and cell lineage
+
+PRJNA603327 contains exactly the ten PlaViSca runs SRR11008269–SRR11008278.
+ENA registers every run as Illumina HiSeq 4000, transcriptomic single-cell
+RNA-seq with oligo-dT selection. Publication Table 1 independently supplies the
+strain, host species and ID, collection day, chloroquine status and author cell
+total for each biological sample. These fields agree with the PlaViSca study
+object for all 9,766 cells. The three treated Aotus samples were collected 16
+hours after one oral dose: 5 mg/kg for Indonesia-I/CDC and 10 mg/kg for Chesson
+and AMRU-I. Untreated labels describe the other seven libraries.
+
+The author prefixes are historical labels and cannot be interpreted literally.
+For example, `NIH_Ao` is the Indonesia-I Aotus untreated library, whereas
+`PB_MACS` is the second NIH-1993 Saimiri library. The definitive crosswalk in
+`sa2020_authoritative_sample_crosswalk.tsv` is supported jointly by the exact
+Table 1 sample total and identity, the ENA sample alias, and a near-exclusive
+barcode overlap. It resolves the preliminary mapping suspicion:
+
+| Author prefix | Run | Publication cells | PlaViSca cells | Shared barcodes | Author missing | PlaViSca outside main list |
+|---|---|---:|---:|---:|---:|---:|
+| NIH_Sa | SRR11008269 | 928 | 972 | 919 | 9 | 53 |
+| NIH_CQ | SRR11008270 | 589 | 632 | 589 | 0 | 43 |
+| NIH_Ao | SRR11008271 | 2,098 | 2,147 | 2,058 | 40 | 89 |
+| PB_MACS | SRR11008272 | 267 | 335 | 249 | 18 | 86 |
+| Ches_Sa | SRR11008273 | 249 | 237 | 228 | 21 | 9 |
+| Ches_CQ | SRR11008274 | 521 | 478 | 464 | 57 | 14 |
+| Ches_Ao | SRR11008275 | 1,037 | 1,022 | 999 | 38 | 23 |
+| AMRU_Sa | SRR11008276 | 22 | 255 | 22 | 0 | 233 |
+| AMRU_CQ | SRR11008277 | 1,795 | 1,960 | 1,795 | 0 | 165 |
+| AMRU_Ao | SRR11008278 | 1,709 | 1,728 | 1,695 | 14 | 33 |
+
+The 9,766 PlaViSca IDs are exactly
+`<last-three-digits-of-SRR>_<STARsolo-filtered-barcode>`, in matrix order. Every
+STARsolo `GeneFull/filtered` column occurs once in `sa2020.rds`; there are no
+missing or extra study-object cells. The final app table has the identical 9,766
+unique IDs, with no study-object cell missing or added. All shared metadata are
+unchanged except the systematic `sample_type` vocabulary transformation already
+recorded by the cross-study audit. See `sa2020_count_lineage.tsv`,
+`sa2020_inventory_summary.tsv`, and `sa2020_source_final_metadata.tsv`.
+
+Cell IDs are unique. There are no pairs with identical complete 5,644-feature
+count profiles. There are 183 barcode tokens reused in two or three runs, as is
+expected when independent 10X libraries use the same barcode whitelist; these
+are not duplicates because the run-scoped IDs and expression profiles differ.
+The numeric run prefix is therefore essential and bare barcode joins are invalid.
+
+#### The 9,766 versus 9,215/13,503 question
+
+The discrepancy is now **resolved as a population difference**, not a numerical
+reporting discrepancy. The publication selected transcriptomes using its custom
+HISAT2/read-window pipeline after PCR-deduplication: 9,215 cells with at least
+5,000 and at most 75,000 unique P. vivax reads for the main analysis, and 13,503
+reported cells at the relaxed 1,000-read lower cutoff. PlaViSca instead accepted
+all columns emitted by a later STARsolo `GeneFull/filtered` call and applied no
+author cell list or further droplet/QC threshold.
+
+Publisher S1 Data contains exactly 9,215 unique P. vivax IDs. Under the validated
+crosswalk, 9,018 are in PlaViSca, 197 are absent, and 748 PlaViSca cells are not
+in the main publication population. Publisher S7 Data contains 13,502 unique IDs,
+one fewer than the 13,503 stated in the article; every main-list ID is present.
+Of the 9,766 PlaViSca cells, 9,432 occur in S7 Data. Thus the PlaViSca inventory
+partitions exactly into 9,018 main-analysis cells, 414 additional relaxed-only
+author cells, and 334 reprocessing-only cells. S7 Data has 4,070 author IDs absent
+from PlaViSca. Evidence is in `sa2020_main_analysis_cell_lineage.tsv`,
+`sa2020_lower_threshold_cell_lineage.tsv`, and `sa2020_inventory_summary.tsv`.
+
+The 748 and 334 cells are confirmed list differences, but are not automatically
+biologically invalid droplets. STARsolo gene UMIs and the publication's unique
+read/window criterion are not interchangeable. The article-versus-S7 one-cell
+difference and the reason individual author cells were gained or lost by the
+independent reprocessing remain unresolved.
+
+#### Expression-count preservation
+
+Every retained count in `sa2020.rds` is identical, cell by cell and feature by
+feature, to the corresponding local STARsolo `GeneFull/filtered` matrix: zero
+unequal entries in all ten runs, and identical retained UMI totals. The ten inputs
+each contain the same 6,861 features. Production intentionally removes the 50
+GFF-annotated rRNA features and Seurat's `min.cells=1` drops 1,167 features with
+zero counts across all ten filtered matrices, leaving 5,644. Seurat changes
+feature-ID underscores to hyphens without creating a collision here. Full
+disposition is in `sa2020_feature_disposition.tsv`.
+
+This proves preservation from the local STARsolo matrices to `sa2020.rds`; it
+does not prove equivalence to the authors' HISAT2 500-bp-window counts, which are
+not deposited as a raw count matrix in the inspected supplements. The deployed
+`cleaned_dataset.rds` contains final metadata, not a Sa2020 expression matrix, so
+count preservation beyond the study RDS cannot be tested from that artifact.
+
+#### Source gametocyte annotations and the recycled filter
+
+Publisher S5 Data has 9,158 unique IDs, all a subset of the 9,215 main list. Its
+57 omitted main-list cells are asexual by reconciliation with Table 1. The sheet
+contains 7,587 `Asexual`, 1,477 `Female`, and 94 `Male` rows; the female and male
+totals exactly equal the sex totals in publication Table 1. Under the validated
+bridge, 8,970 annotation rows are present in PlaViSca and 188 are absent. The
+present source annotations comprise 7,438 asexual, 1,441 female and 91 male cells.
+
+The expression
+`filter(type == c("Male gametocyte", "Female gametocyte"))` is a **confirmed
+code defect**. It alternates the comparison target by row parity. It keeps only
+789 of 1,571 source sex rows (749 female and 40 male), omitting 782 source rows.
+Among cells actually present in PlaViSca, the correct `%in%` filter finds 1,532
+source sex annotations; recycling finds 773 and loses 759.
+
+The prefix conversion is independently a **confirmed code defect**. Production
+correctly maps the six AMRU/Chesson prefixes, but maps both `NIH_Ao` and `NIH_CQ`
+to run suffix 269, maps `NIH_Sa` to 272, and omits `PB_MACS`; the authoritative
+mapping is 271, 270, 269, and 272 respectively. Recycling plus this faulty map
+produces 355 ID matches. Only 354 point to the intended source cell. The remaining
+match is a chance cross-library barcode collision: source
+`NIH_Sa_CCTTCGAGTTGTACAC` should map to `269_CCTTCGAGTTGTACAC` but production
+targets `272_CCTTCGAGTTGTACAC`. Evidence is in
+`sa2020_source_annotation_lineage.tsv`, `sa2020_gametocyte_filter_summary.tsv`,
+and `sa2020_gametocyte_code_effect_by_prefix.tsv`.
+
+Against the correctly mapped source sex calls, current final stages agree for
+1,344 present cells and disagree for 188. Agreement comprises 1,333 females and
+11 males. Disagreements comprise 108 source females and 80 source males; five of
+the source males are currently female, and the remainder are assigned asexual
+stage labels. See `sa2020_source_vs_final_gametocytes.tsv`. These comparisons do
+not validate the biological accuracy of either label set.
+
+Source `Type` is an author-provided Fig 5 annotation. `pred_gametocyte` and the
+cluster-derived portion of `life_cycle_stage` are PlaViSca predictions. Numerical
+agreement does not turn a PlaViSca prediction into source provenance. The current
+single final-stage field obscures that distinction, especially where a source
+override happened to equal the prior cluster label.
+
+#### Remaining metadata findings
+
+- `study_pmid`, run, study label, year, HiSeq 4000, host species, host ID, strain,
+  collection day and chloroquine assignments are supported at the library level.
+- `10x_Chomium_V2` is misspelled and the inspected publication/ENA records support
+  10X Genomics Chromium 3'-end scRNA-seq but do not establish the `V2` chemistry.
+- `USA_Rockville` reflects the registered experimental sample location, not a
+  common parasite origin. The publication describes Chesson as New Guinea,
+  Indonesia-I/CDC as Indonesia, AMRU-I as Papua New Guinea, and NIH-1993 as
+  related to Salvador-I. Preserve strain history separately from sample location.
+- The three chloroquine libraries are paired post-treatment collections from the
+  same Aotus animals as their untreated libraries. `biological_replicate = NA`
+  loses that pairing, while `num_srr = 10` is a study run count, not a biological
+  replicate count.
+- Publication methods support blood-stage parasites enriched with MACS columns.
+  They do not support treating STARsolo filtering as the publication QC method.
+
+#### Proposed Sa2020 repair policy (not applied)
+
+1. Preserve the immutable run-scoped source ID and attach the reviewed
+   author-prefix/run crosswalk. Fail on any duplicate composite ID or unexpected
+   barcode mismatch.
+2. Explicitly choose and label the inclusion authority. For a
+   publication-faithful main dataset, retain the 9,018 intersecting main-list
+   cells and report the 197 unrecovered author cells. If the reprocessed 9,766 are
+   retained, label each as `author_main` (9,018), `author_relaxed_only` (414), or
+   `reprocessed_only` (334); never describe all 9,766 as the published 9,215.
+3. Preserve all S5 Data `Type` values by exact validated ID, including `Asexual`,
+   in a separate `source_sex_annotation` field. Leave it missing where no source
+   row exists. Replace recycled equality with `%in%` only if a sex-only derivative
+   is required. Do not silently overwrite source calls with PlaViSca clusters or
+   vice versa.
+4. Store PlaViSca cluster/SingleR predictions, source annotations, and any display
+   precedence in separate fields with method provenance. Review the 188 conflicts
+   rather than treating them as an automatic correction list.
+5. Correct `Chromium`, do not assert v2 without new evidence, preserve registered
+   platform separately, model untreated/paired chloroquine exposure explicitly,
+   and separate experimental location from strain geographic history.
+6. Preserve the demonstrated STARsolo counts and the feature-disposition map.
+   A future regeneration must assert zero count differences and the exact cell
+   partition. Recovery of the 197 missing main cells requires a deliberate raw or
+   author-matrix reconstruction and is not a metadata-only repair.
+
+**Final Sa2020 classification:** confirmed inclusion-population divergence;
+confirmed recycled-filter and prefix-map defects; confirmed loss of source/PlaViSca
+annotation provenance; confirmed technology typo/unsupported version and metadata
+concept conflation. Unresolved are the S7 one-cell discrepancy, the biological/QC
+status of independently reprocessed cells, author-count equivalence (no deposited
+author raw count matrix inspected), and recovery of missing author cells.
+
 ### Ruberto2022_1: liver source selection
 
 **APPARENTLY CONSISTENT:** ENA PRJNA843856 has six runs; the four used infected

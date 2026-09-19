@@ -635,3 +635,449 @@ event modified production data. All conclusions above use completed comparisons.
 
 Validation after production correction remains not applicable: no production
 correction or regeneration was authorized or performed in this follow-up.
+
+
+## Preliminary audit of the other PlaViSca studies and shared pipeline
+
+**Cross-study addition, 2026-09-19; inspection and documentation only.** The
+preceding detailed Mancio-Silva audit is unchanged. This addition checks the five
+other study scripts, all six Hazzard2024 chunks and merger, shared integration,
+SingleR, source-table and export code, existing study objects, and the deployed
+`cleaned_dataset.rds`. It uses targeted publication/accession/deposit metadata.
+It does not validate every input, alignment, count matrix, reference, orthology,
+QC decision, embedding or biological annotation. No production script/data was
+modified, no cells were removed, and no SingleR/Harmony/export was rerun.
+
+The inspected preprocessing branch is `plavisca-audit-fixes`, HEAD `c2919da` at
+inspection; production-code baseline remains `e5b3de5cfaa93d4e1a6ed8c8c4722dbcf1ec9144`.
+Sol performed the bounded script review. R inspection used the prescribed Pixi
+command from `scripts`, with Seurat 5.3.0. Historical comparisons read app Git
+commit `c80580f` without checking out a branch. That commit is a matching historical
+candidate, not a proven executed build. The central integrated object is absent.
+
+Every finding below uses these categories:
+
+- **CONFIRMED DEFECT:** a demonstrated code error, conflicting authoritative
+  assignment, or deployed-data contradiction; code and deployed scope are stated.
+- **STRONG SUSPICION / REQUIRES VALIDATION:** plausible scientific or lineage risk
+  whose mechanism, biological validity or artifact impact is not established.
+- **APPARENTLY CONSISTENT:** the named checks agree; this is not study validation.
+- **NOT YET AUDITED:** no sufficient study-specific check was performed.
+
+### Bibliographic/data-source table (separate from analytical metadata)
+
+PubMed electronic dates, titles, DOI and PMID were checked for all five studies
+(`cross_study_publications.tsv`). Publisher pages independently confirm the dates
+and titles. The five script titles and DOIs agree with these publications, allowing
+HTML formatting, terminal punctuation and whitespace. Years and PMIDs in the
+study objects agree with the corresponding study; the source-table script itself
+has no PMID column. Its `Number_of_cells` values are PlaViSca output counts, not
+an independently established publication population.
+
+| Study | PMID | DOI | Verified publication date | Publication/source cell-count meaning |
+|---|---|---|---|---|
+| Sa2020 | 32365102 | 10.1371/journal.pbio.3000711 | 2020-05-04 | Main analysis: 9,215 parasite transcriptomes after read-based QC; alternative lower-threshold analysis: 13,503 |
+| Ruberto2022_1 | 36093191 | 10.3389/fcimb.2022.986314 | 2022-08-25 | 1,438 parasite transcriptomes across two infected-hepatocyte replicates |
+| Ruberto2022_2 | 35926062 | 10.1371/journal.pntd.0010633 | 2022-08-04 | 9,947 salivary-gland sporozoites |
+| Hazzard2022 | 36525464 | 10.1371/journal.pntd.0010991 | 2022-12-16 | Published sporozoite analysis: 2,609 + 2,363; exact total blood/source-list population not established here |
+| Hazzard2024 | 39223117 | 10.1038/s41467-024-51949-8 | 2024-09-02 | 80,024 profiled parasites; deposited processed table also has 80,024 unique rows |
+
+**CONFIRMED DEFECT, bibliography:** `data_source_manipulation.R:19` says `Sar2020`
+instead of `Sa2020`; line 12 gives Hazzard2022 `16-Nov-22`, but the publication is
+16 December 2022. The deployed `PlaViSca/data/data_source.csv` also has the wrong
+November date and additionally lists that paper's journal as `PLoS Biol`, rather
+than `PLoS Negl Trop Dis`. Its Ruberto author strings are `Anthony et al.` rather
+than a surname-based citation, unlike the checked-out table script. Its schema
+omits study/count columns, further showing that current source code and deployed
+bibliography are not identical. These are bibliographic defects, not evidence of
+incorrect counts or biological cell annotations.
+
+Sources: [Sa2020](https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3000711),
+[Ruberto liver](https://doi.org/10.3389/fcimb.2022.986314),
+[Ruberto sporozoites](https://journals.plos.org/plosntds/article?id=10.1371/journal.pntd.0010633),
+[Hazzard2022](https://journals.plos.org/plosntds/article?id=10.1371/journal.pntd.0010991),
+[Hazzard2024](https://doi.org/10.1038/s41467-024-51949-8).
+
+### Cell inventories and scope of the boundary check
+
+| Study | PMID | Study RDS / final cells | Established publication/source count | Inclusion authority in PlaViSca | Metadata risk | Annotation risk | Preliminary status |
+|---|---|---|---|---|---|---|---|
+| Sa2020 | 32365102 | 9,766 / 9,766 | 9,215 main analysis; 13,503 alternative | STARsolo GeneFull filtered cells, not an author-list subset | Handwritten library bridge, days/doses/animal IDs; geographic concept | Confirmed source-filter error; source-ID conversion suspect | CONFIRMED DEFECT plus REQUIRES VALIDATION |
+| Ruberto2022_1 | 36093191 | 1,438 / 1,438 | 1,438 | Local Hep59 source-object IDs and LiverForm | Source-object chain of custody unresolved; parasite/host provenance separation | Source forms internally agree; blood-reference HPI inappropriate | APPARENTLY CONSISTENT selection, not fully audited |
+| Ruberto2022_2 | 35926062 | 9,947 / 9,947 | 9,947 | Local combined object's Stage==Sporozoite | Local-object provenance and barcode bridge authority | Source-defined sporozoites; inappropriate HPI | APPARENTLY CONSISTENT selection, not fully audited |
+| Hazzard2022 | 36525464 | 3,294 / 3,294 | 4,972 published sporozoites; blood total not established | Reprocessed raw GeneFull with emptyDrops | Registered instrument/protocol conflict; geography concept | Confirmed broad/detailed contradiction and HPI applicability | CONFIRMED DEFECT plus REQUIRES VALIDATION |
+| Hazzard2024 | 39223117 | 80,024 / 80,024 | 80,024 processed rows, checksum validated | Deposited processed-cell list | Confirmed host-ID and strain errors; positional days; run-count semantics | Hard-coded cluster interpretation; study dominates integration | HIGH PRIORITY; CONFIRMED DEFECT plus REQUIRES VALIDATION |
+
+For every study, pre-study IDs and final IDs are unique and identical in set and
+within-study order: zero pre cells absent from final, zero final cells absent from
+pre. This is an identity/inventory check, not a full raw-expression lineage check.
+The objects have RNA `counts` only and no stored graphs/commands. Shared metadata
+were compared by cell ID; changes in sample-type vocabulary, liver-form spelling,
+Ruberto liver host wording and treatment terminology are recorded in
+`cross_study_metadata_concordance.tsv`, not automatically classified as errors.
+No assumption of positional equivalence was used to join separate objects.
+
+### Sa2020: inclusion and source gametocyte annotations
+
+**APPARENTLY CONSISTENT:** ENA PRJNA603327 contains exactly the ten used runs
+SRR11008269–SRR11008278, all registered HiSeq 4000. Biosample strain/host and
+sample aliases support the script's Saimiri/Aotus, NIH-1993/Indonesia-I/Chesson/AMRU-I
+and CQ-bearing-library assignments. This does not validate exact host ID, infection
+day, CQ dose/time or untreated/control semantics. Those finer assignments are
+**NOT YET AUDITED** against original sample records/table.
+
+`sa2020_pv_analysis_script.R` reads STARsolo `GeneFull/filtered`, removes rRNA,
+uses `min.cells=1,min.features=1`, and saves the merged counts. Knee plots are
+exploratory; `emptyDrops` is commented out and no author-cell-list subset is
+active. **CONFIRMED DEFECT, terminology:** `10x_Chomium_V2` is misspelled; it does
+not establish capture chemistry by itself. **REQUIRES VALIDATION, geography:**
+`USA_Rockville` faithfully reflects registered `geo_loc_name`, but should not be
+presented as original parasite geographic origin. It describes the deposited
+experimental sample location; strain origins require a different provenance field.
+
+The publication's 9,215 main-analysis transcriptomes follow PCR/read-based QC
+with the higher 5,000-read cutoff and exclusion of very high-read droplets; its
+13,503 alternative uses the lower 1,000-read cutoff. PlaViSca's 9,766 STARsolo
+filtered cells use a different counting/QC definition. The net difference of
+551 is **not by itself an analytical error** or proof of 551 additional cells.
+
+Publication Fig 1B supplement `pbio.3000711.s030`, read in memory, contains
+9,215 non-`Pberg` identifiers, including 267 `PB_MACS` records; it also contains
+4,884 `Pberg` comparison cells. Candidate library correspondence inferred from
+barcode overlaps is AMRU_Ao→278, AMRU_CQ→277, AMRU_Sa→276, Ches_Ao→275,
+Ches_CQ→274, Ches_Sa→273, NIH_Ao→271, NIH_CQ→270, NIH_Sa→269, PB_MACS→272.
+Under this explicitly **computational candidate bridge**, 9,018 author IDs map to
+study cells, 197 author IDs do not, and 748 PlaViSca IDs are outside the mapped
+main-analysis list. The mapped IDs are unique. The actual STARsolo filtered
+barcode-row counts equal the study counts by run. **STRONG SUSPICION / REQUIRES
+VALIDATION:** PlaViSca includes a different population; the source prefix/run bridge
+must be independently validated before naming these as definitively extra/missing
+biological cells. Barcode overlap alone is insufficient across separate arrays.
+No inclusion change is proposed or applied in this preliminary check.
+
+**CONFIRMED DEFECT, SingleR source-import code:**
+`filter(type == c("Male gametocyte","Female gametocyte"))` is parity-dependent
+recycled equality. It retains 789 of the spreadsheet's 1,571 sex-labeled rows
+(749/1,477 female; 40/94 male), omitting 782. The local workbook matches the publisher download byte-for-byte
+(checksum evidence saved). It has 9,158 rows, including
+unmapped `PB_MACS`; this Fig 5 data table is not a complete 9,215-cell inclusion list.
+Holding the production prefix conversion fixed, current filtering yields 355 final
+ID matches versus 723 for `%in%`: 368 additional matches, of which 325 already agree
+with final stage and 43 disagree. These are conditional code-impact measurements,
+not a validated 43-cell biological correction list. All existing 355 matches agree
+with final source labels (344 female, 11 male).
+
+**STRONG SUSPICION / REQUIRES VALIDATION, source-ID conversion:** current code maps
+both NIH_Ao and NIH_CQ to 269, maps NIH_Sa to 272, omits PB_MACS and has no 270/271
+mapping. This disagrees strongly with the observed candidate bridge and with
+269 being a registered Saimiri NIH sample rather than an Aotus/CQ library. Validate
+author sample aliases and counts/read evidence before assigning corrected IDs;
+otherwise same-token coincidences can create false annotation matches.
+
+### Ruberto2022_1: liver source selection
+
+**APPARENTLY CONSISTENT:** ENA PRJNA843856 has six runs; the four used infected
+libraries are 609=d9/rep2, 610=d5/rep2, 611=d9/rep1, 612=d5/rep1, with two additional
+uninfected controls 613/614. All register HiSeq X Ten. The publication supports
+BGW BioIVT hepatocytes, Mondulkiri-derived parasites, v3 capture and d9 cultures
+following MMV390048 treatment; these are distinct host-tissue and parasite-origin
+concepts. Exact source-object rows agree with day/replicate mapping. The source
+`condition` says `Infected`, not a detailed drug category: drug assignment draws
+on the experimental protocol rather than that field alone.
+
+The local `Hep59.1.2.seu_20aug2025.rds` has 1,438 unique IDs, with 1,147 Hypnozoites
+and 291 Schizonts. Conversions 51inf→612,52inf→610,91inf→611,92inf→609 produce
+1,438 unique IDs: zero unmapped/missing/excess IDs against study and final objects.
+Final liver forms and final lifecycle labels agree for every cell, with 291
+`Schizont (Liver stage)` and 1,147 Hypnozoite. This is **APPARENTLY CONSISTENT**
+source-label propagation, not independent PlaViSca validation of liver identity.
+
+**REQUIRES VALIDATION:** provenance of the dated local object. It contains prior
+RNA/SCT processing commands, but object structure does not establish authorship
+or identity with a publication deposit. The author repository and Zenodo 6463338
+are authoritative starting points; the archive contains large output packages,
+which were not downloaded. The inspected GitHub tree does not identify the dated
+local filename. Preserve source LiverForm separately from SingleR/PlaViSca stage;
+do not equate a liver Schizont with a blood IDC Schizont.
+
+### Ruberto2022_2: source-defined sporozoites
+
+**APPARENTLY CONSISTENT:** ENA PRJEB42435 contains ERR5087438–440 with rep1/2/3 aliases
+and HiSeq X Ten. The local combined object has 9,947 Stage=Sporozoite and 8,304
+BloodStage cells. Every selected sporozoite maps uniquely through Case_909→438,
+Case_922→439,Case_923→440 to the study and final object, with zero missing/excess
+cells. Source days are respectively 16,18,17 and counts 3,375/4,002/2,570, agreeing
+with script assignments. The publication supports Cambodian Mondulkiri isolates,
+Anopheles dirus salivary-gland collection and the 16–18-day window.
+
+The all-Sporozoite override is **source/selection-defined**, not an independent
+PlaViSca prediction. **REQUIRES VALIDATION:** chain of custody of
+`6_PvSPZ.BS.combined.rds`, exact capture chemistry against original library protocol,
+source filtering/count-reference equivalence and raw-expression reconstruction.
+The authors' repository/Zenodo 6474355 are appropriate authorities; deposit manifests
+were inspected, not downloaded in bulk. No full provenance proof follows from
+9,947 matching the publication.
+
+### Hazzard2022: confirmed stage contradiction, different QC
+
+**APPARENTLY CONSISTENT:** ENA PRJNA863611 has eight runs: four PacBio and the four
+used Illumina runs. Registered samples support 498=freeborni sporozoites,
+499=stephensi sporozoites, 500/501=Saimiri boliviensis blood, and source strains
+Sal1/Chesson for the two mosquito libraries, Sal1 for blood. Retained counts are
+1,433/1,425/362/74. **CONFIRMED DEFECT, deployed annotation:** all 2,858 cells of
+498/499 have detailed `life_cycle_stage=Sporozoite` but broad `parasite_stage=Blood
+stage`. The app maps development_phase to parasite_stage, making this contradiction
+user-visible. The source/run override corrects the detailed field without updating
+the broad field; any future correction must occur upstream and propagate to exports.
+
+The script actively runs seeded emptyDrops(lower=1,FDR<=0.001) on raw GeneFull
+counts before object construction. The publication instead uses read/mapping-based
+QC and reports 2,609 + 2,363 sporozoite transcriptomes above its low-read threshold.
+**REQUIRES VALIDATION:** their relationship to the 2,858 retained PlaViSca
+sporozoites; exact source-cell IDs, read/count definitions and blood population
+remain unaudited. Different QC/alignment is established, not automatically invalid.
+
+**REQUIRES VALIDATION, evidence conflicts:** script/study/final instrument is
+NovaSeq6000 for every run, but ENA registers HiSeq2500 for 500/501 and NovaSeq6000
+for 498/499; publication prose describes NovaSeq. Preserve registered instrument
+and publication protocol separately pending reconciliation. Registered strain
+labels also require reconciliation with publication prose describing NIH/Chesson
+mosquito feeds; do not silently overwrite either authority. `USA_District of
+Columbia` matches deposited sample location, not demonstrated original parasite
+origin. Script days/host IDs are literal "NA" strings. Publication states sporozoite
+collection 21 days post-feed, but precise run-level/time-origin mapping should be
+verified before replacing missing day_post_infection; missing blood infection day
+is not itself an error.
+
+### Hazzard2024: high priority, inclusion authority does not validate metadata
+
+**APPARENTLY CONSISTENT:** PMID39223117 and used accessions belong to the publication's
+PRJNA1047651. ENA lists 43 deposited runs, all NovaSeq6000. The six chunk scripts
+import 30 distinct runs without overlap: 955–956,959–965,966–972,975–976,980–987,
+991–994 (prefix SRR27021). The merger's 24 source prefixes are exactly the 24 runs
+represented in the 80,024-cell study/final object. Six imported runs contribute
+no retained source IDs (959,961–965); 13 deposited runs are not imported by these
+chunks. Their experimental roles/exclusion rationale are **NOT YET AUDITED**.
+`num_srr=24` describes retained-library count, not all 43 deposited runs; record
+these distinct study-provenance counts explicitly rather than recycling an
+ambiguous ordinary cell metadata field.
+
+**CONFIRMED DEFECT, vector construction; impact bounded:** every chunk's run_id
+vector has n² entries because rep(vector,n) repeats the full vector. Loops use only
+the first n entries, so this is not Mancio-style per-cell positional recycling.
+66_72 has seven samples and eight days: loop assigns 31,30,29,31,31,30,24 and ignores
+last29; no length-eight assignment occurs, so no execution error is implied.
+91_94 has four samples but five strain entries, likewise ignoring its fifth entry.
+These unchecked surplus vectors can conceal mapping errors. The duplicated
+`run_id <- run_id <-` assignment is cosmetic. Source values are not validated
+merely because execution succeeds.
+
+**CONFIRMED DEFECT, reached study/final data and corroborated upstream:**
+
+- SRR27021986 has host_id5537_3 for 3,489 cells; both accession alias and deposited
+  processed source identify 5537_2.
+- SRR27021993 has host_id5709_1 for 16,321 cells; both accession alias and deposited
+  processed source identify 5708_1.
+- All 16,321 cells of SRR27021993 carry strain NIH1993-F3, but registered strain is
+  Chesson and deposited processed rows uniformly have Genotype=Chesson,
+  Condition=mono_CH. The extra strain entry in 91_94 and applied fourth entry
+  confirm the positional code defect's deployed effect.
+
+`fed banimal 5164` is a confirmed source-code typo for imported run962, but run962
+is excluded from the retained source list: it did **not** reach the checked
+80,024-cell study/final metadata. Mixed NIH/Chesson strain and PNG/El Salvador
+strings describe experimental infection/strain combinations rather than each
+cell's genotype or a single collection place; exact authority and semantics of
+these combinations, animal IDs and days require detailed audit. For example,
+run972's processed cells include both NIH and Outcross genotypes: preserve
+source cell genotype separately from library infection composition. Registered
+Biosample host=Homo sapiens and USA:Bethesda for the three targeted libraries
+conflicts with monkey experimental provenance/strain-origin metadata; retain
+registry evidence separately rather than using it uncritically to change hosts.
+
+**APPARENTLY CONSISTENT, source inclusion:** local `Proccessed_Data.txt` matches
+Zenodo12775216 md5 `6ede1f7da4e5d57841c9f90883b2b2c1`. It has 80,024 rows and unique
+source IDs; conversion produces 80,024 unique reconstructed IDs with zero
+unmatched source or extra retained cells against study/final. All 24 retained
+source groups are blood libraries; mosquito chunks do not contribute to this
+retained processed population. Five chunk RDS objects remain: their union has
+8,736,651 unique IDs, with no duplicates. They cover 75,996 final IDs; the missing
+4,028 are run960, whose 59_65 chunk RDS is absent. Their 8,660,655 additional IDs
+are pre-subset reconstructed candidates, not extra final analytical cells.
+All 24 raw STARsolo barcode files are present; inventory is recorded. No full
+raw-expression comparison or publication count-table/read provenance check was
+performed. **NOT YET AUDITED:** expression equivalence, skipped-run rationale,
+all days/animal provenance, and inclusion/QC derivation within the author analysis.
+
+### Shared SingleR, HPI, lifecycle and gametocyte annotations
+
+**CONFIRMED DEFECT, deployed HPI applicability:** all 105,963 final cells have a
+nonmissing HPI label, and every study contains all seven labels 6,12,24,32,36,42,48.
+This includes all 1,438 Ruberto liver cells, all 9,947 Ruberto sporozoites and the
+2,858 Hazzard2022 sporozoites; the existing Mancio finding is independently
+corroborated. The final vocabulary is harmonized (e.g. Host blood), while study
+objects still use Mammalian host: blood. Current singleR.R masks with the latter
+exact string, so vocabulary and execution order matter.
+
+**Historical evidence refines the cause:** c80580f assigns HPI and detailed IDC
+bins without any non-blood mask, and its late source overrides retain the HPI
+label. Thus the artifact is consistent with an older unmasked pipeline; vocabulary
+mismatch is a possible current/historical lineage risk, not the only proven cause.
+The exact executed build is unknown. Current masks cannot be credited with having
+protected the deployed artifact. Quantification by study/sample/phase/detailed
+stage/HPI is in cross_study_hpi_stage.tsv and cross_study_final_stage_metadata.tsv.
+
+The Zhu SMRU1 reference is a blood-stage time course. Its labels indicate reference
+similarity, not measured infection age, and applicability to liver/sporozoite/sexual
+forms is not established. Future meaningful HPI should be restricted to validated
+appropriate asexual blood cells with explicit inference provenance; gametocyte
+HPI also requires exclusion/applicability review. Preserve source labels and the
+SingleR scores/delta/pruning confidence, not just hard labels. The prediction object
+is transient; no explicit confidence persistence is present and no such fields were
+found in the final metadata. **NOT YET AUDITED:** reference normalization,
+orthology join cardinality/feature compatibility and inference performance.
+0–<18 Ring,18–<30 Trophozoite,30–<46 Schizont,46–48 Merozoite are **PlaViSca heuristic
+bins**, not directly validated universal lifecycle annotations.
+
+**CONFIRMED DEFECT, graph argument name; actual behavior clarified:** current and
+c80580f SingleR call FindClusters(graph_name="new_clustering"), but installed
+Seurat uses graph.name. The underscore argument does not select that graph;
+RNA_snn is the default. Repository code has no new_clustering graph creation;
+integration creates RNA_snn from integrated PCA. A missing new_clustering graph
+therefore does not by itself establish an execution failure. The central object
+is absent, so historical graph identity/contents and exact versions are not
+inspectable. **REQUIRES VALIDATION:** reproducibility of cluster numbering and
+hard-coded cluster 2=female/cluster 4=male. Nineteen female/six male markers feed
+AddModuleScore, but no explicit score threshold determines final cluster labeling.
+Marker specificity and clustering biology remain unaudited.
+
+Stored cluster-label counts and final gametocyte labels:
+
+| Study | Cluster female / male | Final female / male | Source-defined propagation evidence |
+|---|---|---|---|
+| Sa2020 | 1,454 / 200 | 1,470 / 211 | 355 matched sex overrides (344F/11M); 328 already cluster female, 27 cluster asexual |
+| Ruberto2022_1 | 20 / 0 | 0 / 0 | 1,438 source liver overrides; all 20 cluster-female cells end with liver forms |
+| Ruberto2022_2 | 0 / 0 | 0 / 0 | 9,947 selection-defined sporozoite overrides |
+| Hazzard2022 | 48 / 0 | 47 / 0 | One stored cluster-female mosquito cell ends as source/run-defined Sporozoite |
+| Hazzard2024 | 20,292 / 0 | 20,292 / 0 | No independent sex-annotation authority demonstrated in this inspection |
+
+Counts overlap across stages of assignment; they are not additive independent
+inferences. Sa overrides are reconstructed through the suspect conversion, not
+proof of a valid biological bridge. Liver labels are source forms, not a source
+sex annotation. c80580f puts source liver/refine/sporozoite overrides after cluster
+labeling; current code puts them before the cluster gametocyte overwrite, then
+removes detailed male/female gametocytes with Anopheles hosts. This changed order
+can lose source-defined labels and affects inclusion. **CONFIRMED code behavior:**
+that subset is a real post-integration removal operation, not metadata cleanup.
+**REQUIRES VALIDATION, executed impact:** zero cells are absent between any existing
+study RDS and final rows, and no final mosquito gametocyte remains. One surviving
+mosquito cell has stored cluster-female prediction and final Sporozoite; its exact
+ID is saved. No historical removed-cell inventory is available, so deleted cells
+cannot be reconstructed or an executed removal count claimed. No clustering or
+annotation/removal was rerun for this audit.
+
+Current new development_phase defaults unclassified detailed labels to Blood
+stages and does not repair the old parasite_stage field consumed by the app.
+Its source liver/sporozoite logic and obsolete Mancio label selector also differ
+from deployed lineage. Preserve source LiverForm/State/sex labels, initial IDC
+inference, cluster labels and final adjudication separately in a future repair.
+This is a cross-study addition to the existing Mancio provenance recommendation,
+not a change to the earlier Mancio conclusions or proposed inclusion policy.
+
+### Integration: major scientific validation requirement, effective grouping caveat
+
+The script merges six biologically disparate studies, normalizes RNA, selects 2,000
+variable genes, scales/PCA, retains unintegrated embeddings and invokes
+IntegrateLayers(method=HarmonyIntegration,group_by="study_label").
+**Important verified API qualification:** installed HarmonyIntegration accepts
+extra arguments but does not consume group_by; it constructs groups from assay
+layers via CreateIntegrationGroups, then calls RunHarmony(vars_use="group").
+The code expresses an intention to group by study, but that keyword does not prove
+the actual grouping. Study objects each have one joined counts layer, so merged
+layer membership may correspond to study; effective group-to-study correspondence
+must be checked in the historical central object/build before asserting it.
+Installed method source is captured; no integration was run.
+
+**STRONG SUSPICION / REQUIRES VALIDATION, major scientific risk:** study/layer is
+confounded with lifecycle, tissue, host, technology and experimental conditions.
+This can remove true biology. Code inspection alone does not prove over-correction.
+Future validation must compare integrated/unintegrated representations, preservation
+of lifecycle/tissue marker patterns and trajectories, and batch mixing only within
+biologically comparable subsets. Attractive mixing is insufficient. Use appropriate
+RNA expression/counts, not Harmony/PCA/UMAP embeddings, as expression measurements
+for differential expression. QC/source inclusion must be validated first.
+
+### flatten_data.R: separate code defects from deployed export
+
+**CONFIRMED DEFECT, current code and deployed output:** the loop constructs
+combined top_genes_df, but save_data uses last-loop top_genes_exp instead. Deployed
+cleaned_dataset$top_genes_exp has 14,940 rows/four columns, no study column, and its
+cell IDs all belong to the 1,494 Mancio cells (10 gene rows/cell). Other studies'
+top-gene summaries are missing from that saved component. Fix later at export,
+not by manually patching the final RDS. hiv_data is a cosmetic HVF naming issue;
+no additional analytical defect from that variable name was demonstrated.
+
+**APPARENTLY CONSISTENT, scale layer spelling under installed API:** current
+GetAssayData(layer="scale") resolves scale.data in a small in-memory Assay5
+inspection under the Pixi versions. It is not automatically a v5 execution error.
+The historical central assay is absent: actual historical scale layer/default
+assay and scaled-value provenance remain **NOT YET AUDITED**. No production assay
+was scaled or changed for this API check.
+
+**CONFIRMED code/artifact divergence:** current export removes pred_gametocyte,
+parasite_stages,liver_form,refine_state, but deployed mr_data still includes
+pred_gametocyte,liver_form,refine_state and life_cycle_stage, not the current
+parasite_stages/development_phase schema. Original metadata names are collected
+before clean_names and then selected with any_of(metadata), potentially omitting
+renamed columns, as previously traced for Mancio. Hard-coded old working paths
+are present across scripts. These reproducibility/code concerns are separate from
+valid expression in existing artifacts; non-Mancio expression values were not
+fully compared in this preliminary audit.
+
+### Correction plan, regeneration dependencies and next forensic audit
+
+No correction is applied. Future small reviewed repairs should address source-table
+bibliography, source-keyed host/strain fields, Sa library/sex annotation joins,
+HPI applicability/provenance, broad/detailed stage consistency, graph/group API
+arguments and combined top-gene export. First establish the correct executed
+lineage and authoritative source bridges. Repair at the earliest responsible step:
+study metadata constructions → study objects → central object/annotation → exports.
+Cell/QC changes require recomputation of affected normalization/integration and
+annotations; metadata-only changes should not be portrayed as integration validation.
+Export-only summary errors belong in export. Preserve originals/source evidence and
+separate harmonized/inferred fields. Validation after correction is not applicable;
+validation performed here is documented by the evidence below.
+
+Recommended full-audit order remains **Sa2020 first**, then **Hazzard2024**,
+**Hazzard2022**, **Ruberto2022_1**, **Ruberto2022_2**. Sa has a demonstrated sex-filter
+error plus a source-library bridge/inclusion discrepancy affecting biological
+conclusions; validate that bridge and author QC before repairing annotations.
+Hazzard2024 is equally urgent operationally because it dominates the atlas and
+already has authoritative, high-impact metadata defects. Hazzard2022 follows for
+its confirmed user-visible stage contradiction and QC/platform conflicts. The
+Ruberto selections appear internally coherent but still need deposit lineage and
+source-label validation. No study is declared publication-ready.
+
+### New evidence and verification limits
+
+All newly created files are named `cross_study_*` in this audit directory; exact
+filenames, byte sizes and SHA256 are listed in `cross_study_evidence_manifest.tsv`.
+`cross_study_documentation_validation.txt` records append-only preservation of the
+previous audit and tracked production-code status. The pre-existing SHA256SUMS.txt
+retains hashes from the prior audit package; its AUDIT.md hash predates this clearly
+marked addition. Use the new cross-study manifest for this revision, without
+rewriting old Mancio evidence.
+
+Key evidence: cell_summary; run_metadata/final_run_metadata; metadata_concordance;
+hpi_stage/final_stage_metadata; gametocyte/mosquito_cluster_gametocyte_candidates;
+liver_mapping/liver_source_groups; spz_mapping/spz_source_groups;
+hazzard2024_mapping/run_membership/source_conditions/existing_chunk_summary;
+sa_source_filter/filter_summary/author_fig1B_ids/author_barcode_overlap/
+candidate_lineage/candidate_additional_cells; publications and five ENA tables;
+accession_sample_attributes; deposit_manifest; source_checksum_validation;
+retrievals; two historical script snapshots; inspection source/log text files.
+Author repositories were queried for file provenance without bulk downloads;
+missing local dated-object identities remain unresolved. No deposited count archive
+was downloaded, and no production object was regenerated. Evidence scripts only
+read production files and write these audit tables/logs; the sole synthetic assay
+was for API resolution, not a scientific reanalysis.

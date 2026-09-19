@@ -13,7 +13,28 @@ library(scater)
 library(SingleCellExperiment)
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
 ##### 2. Load annotation files
@@ -183,14 +204,19 @@ for (i in 1:length(all_pv)) {
 # After transforming the data, check out the dimensions of the new Seurat object.
 # How has the noumber of cells and the number of features changed?
 
-# Add metadata. Note: the same will need to be done for the other samples that we analyze.
-study_pmid <- rep(study_num, length(all_pv))
-run_id <- rep(paste0("SRR11008", 269:278))
-study_label <- rep("Sa2020", length(all_pv))
-num_srr <- rep(10, length(all_pv))
+# Add metadata via explicit per-run vectors (each already keyed 1:1 to
+# `samples`, never recycled) plus keyed post-hoc fixes for D016,D017,D019.
+run_id <- paste0("SRR11008", 269:278)
+assert_cardinality(run_id, length(all_pv), label = "run_id")
+study_label <- rep(STUDY_LABELS[["sa2020"]], length(all_pv))
 pub_year <- rep(2020, length(all_pv))
-geographic_location <- rep("USA_Rockville", length(all_pv))
-sc_technology <- rep("10x_Chomium_V2", length(all_pv))
+# D017: sample/registry location (deposit site), kept separate from strain
+# parasite-origin below - never combined into one "geographic_location".
+registry_location <- rep("USA_Rockville", length(all_pv))
+experimental_site <- rep("NIH (Rockville, MD)", length(all_pv))
+# D016,D069: corrected spelling; chemistry version (V2) not independently
+# confirmed, so left unqualified.
+sc_technology <- rep("10x_Chromium", length(all_pv))
 sequencer <- rep("Illumina HiSeq 4000", length(all_pv))
 host_species <- c(
   "Saimiri boliviensis",
@@ -204,7 +230,11 @@ host_species <- c(
   "Aotus nancymaae",
   "Aotus nancymaae"
 )
-host_id <- c(
+# D019: host_id already uniquely identifies the individual animal (three IDs
+# repeat: 86574, 86436, 86416, each pairing one chloroquine-treated run with
+# its untreated same-animal counterpart) - this is exactly the replicate
+# structure the schema's biological_replicate_id/animal_id fields require.
+animal_id <- c(
   "3879",
   "86574",
   "86574",
@@ -217,6 +247,7 @@ host_id <- c(
   "86416"
 )
 sample_type <- rep("Mammalian host: blood", length(all_pv))
+tissue_or_sample_type <- rep("Host blood", length(all_pv))
 strain <- c(
   "NIH-1993",
   "Indonesia-I",
@@ -229,37 +260,61 @@ strain <- c(
   "AMRU-I",
   "AMRU-I"
 )
-day_post_infection <- c(15, 16, 12, 21, 24, 16, 12, 24, 16, 12)
-treatment <- c(
-  "No_Treatment",
-  "CQ_(16h_5mg/kg)",
-  "No_Treatment",
-  "No_Treatment",
-  "No_Treatment",
-  "CQ_(16h_10mg/kg)",
-  "No_Treatment",
-  "No_Treatment",
-  "CQ_(16h_10mg/kg)",
-  "No_Treatment"
+# D017: parasite strain-origin, kept as a separate field from the
+# registry/experimental deposit location above.
+parasite_origin_location <- c(
+  "unresolved (NIH-1993; closely related to but distinct from Salvador-I)",
+  "Indonesia",
+  "Indonesia",
+  "unresolved (NIH-1993; closely related to but distinct from Salvador-I)",
+  "New Guinea",
+  "New Guinea",
+  "New Guinea",
+  "Papua New Guinea",
+  "Papua New Guinea",
+  "Papua New Guinea"
 )
-biological_replicate <- rep(NA, length(all_pv))
+day_post_infection <- c(15, 16, 12, 21, 24, 16, 12, 24, 16, 12)
+source_treatment <- c(
+  "None",
+  "CQ_(16h_5mg/kg)",
+  "None",
+  "None",
+  "None",
+  "CQ_(16h_10mg/kg)",
+  "None",
+  "None",
+  "CQ_(16h_10mg/kg)",
+  "None"
+)
+treatment <- ifelse(source_treatment == "None", "No_Treatment", source_treatment)
 
-for (i in 1:length(all_pv)) {
-  all_pv[[i]]$study_pmid <- paste0(study_pmid[[i]])
-  all_pv[[i]]$run_id <- paste0(run_id[[i]])
-  all_pv[[i]]$study_label <- paste0(study_label[[i]])
-  all_pv[[i]]$num_srr <- paste0(num_srr[[i]])
-  all_pv[[i]]$pub_year <- paste0(pub_year[[i]])
-  all_pv[[i]]$geographic_location <- paste0(geographic_location[[i]])
-  all_pv[[i]]$sc_technology <- paste0(sc_technology[[i]])
-  all_pv[[i]]$sequencer <- paste0(sequencer[[i]])
-  all_pv[[i]]$host_species <- paste0(host_species[[i]])
-  all_pv[[i]]$host_id <- paste0(host_id[[i]])
-  all_pv[[i]]$sample_type <- paste0(sample_type[[i]])
-  all_pv[[i]]$strain <- paste0(strain[[i]])
-  all_pv[[i]]$day_post_infection <- paste0(day_post_infection[[i]])
-  all_pv[[i]]$treatment <- paste0(treatment[[i]])
-  all_pv[[i]]$biological_replicate <- paste0(biological_replicate[[i]])
+for (i in seq_along(all_pv)) {
+  n_cells <- ncol(all_pv[[i]])
+  assert_cardinality(colnames(all_pv[[i]]), n_cells, label = paste0("colnames(", names(all_pv)[i], ")"))
+
+  all_pv[[i]]$study_pmid <- rep(study_num, n_cells)
+  all_pv[[i]]$run_id <- rep(run_id[[i]], n_cells)
+  all_pv[[i]]$study_label <- rep(study_label[[i]], n_cells)
+  all_pv[[i]]$pub_year <- rep(pub_year[[i]], n_cells)
+  all_pv[[i]]$registry_location <- rep(registry_location[[i]], n_cells)
+  all_pv[[i]]$experimental_site <- rep(experimental_site[[i]], n_cells)
+  all_pv[[i]]$sequencing_site <- rep(NA_character_, n_cells)
+  all_pv[[i]]$sc_technology <- rep(sc_technology[[i]], n_cells)
+  all_pv[[i]]$sequencer <- rep(sequencer[[i]], n_cells)
+  all_pv[[i]]$host_species <- rep(host_species[[i]], n_cells)
+  all_pv[[i]]$host_taxid <- rep(NA_integer_, n_cells)
+  all_pv[[i]]$animal_id <- rep(animal_id[[i]], n_cells)
+  all_pv[[i]]$biological_replicate_id <- rep(animal_id[[i]], n_cells)
+  all_pv[[i]]$biological_replicate_type <- rep("animal", n_cells)
+  all_pv[[i]]$sample_type <- rep(sample_type[[i]], n_cells)
+  all_pv[[i]]$tissue_or_sample_type <- rep(tissue_or_sample_type[[i]], n_cells)
+  all_pv[[i]]$strain <- rep(strain[[i]], n_cells)
+  all_pv[[i]]$parasite_lineage_isolate <- rep(strain[[i]], n_cells)
+  all_pv[[i]]$parasite_origin_location <- rep(parasite_origin_location[[i]], n_cells)
+  all_pv[[i]]$day_post_infection <- rep(day_post_infection[[i]], n_cells)
+  all_pv[[i]]$source_treatment <- rep(source_treatment[[i]], n_cells)
+  all_pv[[i]]$treatment <- rep(treatment[[i]], n_cells)
 
   all_pv[[i]]$barcode <- paste(
     str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
@@ -269,6 +324,11 @@ for (i in 1:length(all_pv)) {
   )
   colnames(all_pv[[i]]) <- all_pv[[i]]$barcode
 }
+
+# D013-style fix (num_srr): study-level provenance, never an ambiguous
+# per-cell scalar (D019 explicitly forbids a "num_srr cell field" for Sa2020).
+sa2020_source_run_count_deposited <- 10L
+sa2020_source_run_count_imported <- 10L
 
 ##### --------------------------------------------------------------------------
 ##### 6. Processing step 3: data normalization, variable selection, scaling
@@ -327,8 +387,40 @@ pv.combined.all <- JoinLayers(pv.combined.all)
 # pv.combined.all  <- ScaleData(pv.combined.all)
 # pv.combined.all  <- RunPCA(pv.combined.all)
 
+# D018/DEC03: retain all 9766 cells (option b - conservative Phase 1 policy,
+# no cell-membership change), and add main_analysis_member as a provenance
+# covariate from the existing audited publication mapping (9018 TRUE / 748
+# reprocessing-only / 197 publication-main-analysis cells absent from
+# PlaViSca and therefore untaggable here).
+main_analysis_crosswalk <- read.delim(
+  "scripts/ref/sa2020_main_analysis_cell_lineage.tsv",
+  stringsAsFactors = FALSE
+)
+main_analysis_ids <- main_analysis_crosswalk$plavisca_cell_id[
+  main_analysis_crosswalk$plavisca_present
+]
+pv.combined.all$main_analysis_member <- colnames(pv.combined.all) %in% main_analysis_ids
+
+# D013/D032-style fix: run counts are study-level provenance, never a
+# per-cell scalar (D019 explicitly forbids a "num_srr" cell field).
+pv.combined.all$source_run_count_deposited <- sa2020_source_run_count_deposited
+pv.combined.all$source_run_count_imported <- sa2020_source_run_count_imported
+pv.combined.all$source_run_count_retained <- ncol(pv.combined.all)
+
+# Conservative Phase 1 membership policy: preserve all 9766 cells.
+assert_cell_count(ncol(pv.combined.all), 9766L, label = "sa2020.rds")
+assert_unique_cell_ids(colnames(pv.combined.all), label = "sa2020.rds colnames")
+assert_no_literal_na_string(pv.combined.all$treatment, label = "sa2020$treatment")
+assert_no_literal_na_string(pv.combined.all$day_post_infection, label = "sa2020$day_post_infection")
+
 # Save Seurat object
 saveRDS(pv.combined.all, file = "sa2020.rds")
+record_build_manifest(
+  artifact_path = "sa2020.rds",
+  script_path = "scripts/sa2020_pv_analysis_script.R",
+  cell_count = ncol(pv.combined.all),
+  notes = "Fixes D016,D017,D019,D069; D018 resolved as DEC03 option (b) - retain all 9766, add main_analysis_member covariate, no membership change; D014/D015 gametocyte-import fixes live in singleR.R"
+)
 # Remove all object
 rm(list = ls())
 gc()

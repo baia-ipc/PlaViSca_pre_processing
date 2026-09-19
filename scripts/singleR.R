@@ -8,260 +8,312 @@ library(scCustomize) # single-cell data handling and plotting tools
 library(tidyverse)
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 pv.combined.all <- readRDS("./pv_all_studies.rds")
 
-# subset to see barcode of study silva2020
-silva <- subset(pv.combined.all, subset = study_label == "Mancio Silva2022")
+# ============================================================================
+# PART 0: annotation-precedence bookkeeping (Part 4 / annotation_precedence.tsv)
+# ============================================================================
+# source_life_cycle_stage / source_stage_provenance are set upstream, at the
+# earliest responsible per-study preprocessing step (silva.R,
+# ruberto2022_1/2_pv_analysis_script.R, hazzard2022_pv_analysis_script.R),
+# and are NEVER overwritten here. Every study object must already carry
+# tissue_or_sample_type using the single canonical TISSUE_OR_SAMPLE_TYPE
+# vocabulary (fixes the D058 vocabulary-drift root cause) before it reaches
+# this script.
+required_provenance_fields <- c("tissue_or_sample_type", "total_umi_count")
+missing_fields <- setdiff(required_provenance_fields, colnames(pv.combined.all@meta.data))
+if (length(missing_fields) > 0) {
+  pipeline_fail(sprintf(
+    "pv_all_studies.rds is missing required provenance field(s) %s - every per-study script must set these before the merged atlas reaches singleR.R",
+    paste(missing_fields, collapse = ", ")
+  ))
+}
 
+unexpected_tissue_values <- setdiff(
+  unique(pv.combined.all$tissue_or_sample_type[!is.na(pv.combined.all$tissue_or_sample_type)]),
+  TISSUE_OR_SAMPLE_TYPE
+)
+if (length(unexpected_tissue_values) > 0) {
+  pipeline_fail(sprintf(
+    "tissue_or_sample_type contains value(s) outside the canonical TISSUE_OR_SAMPLE_TYPE vocabulary: %s (fixes the D058 vocabulary-drift root cause - add the value to TISSUE_OR_SAMPLE_TYPE in pipeline_lib.R only after confirming it is a genuinely new population, never as a silent workaround)",
+    paste(unexpected_tissue_values, collapse = ", ")
+  ))
+}
 
-# First, upload (PMID:xxxx) data to R (data can be found in the OneDrive folder)
+if (!"source_life_cycle_stage" %in% colnames(pv.combined.all@meta.data)) {
+  pv.combined.all$source_life_cycle_stage <- NA_character_
+}
+if (!"source_stage_provenance" %in% colnames(pv.combined.all@meta.data)) {
+  pv.combined.all$source_stage_provenance <- NA_character_
+}
+
+# ============================================================================
+# PART 1: eligibility gating BEFORE classification (fixes D058, root cause of
+# D021,D034,D037,D044) - blood-IDC reference similarity is computed ONLY for
+# biologically eligible blood-stage cells with usable expression. Liver
+# stages, sporozoites, mosquito-stage populations, source-defined sexual
+# populations, and zero/near-zero expression cells are excluded up front,
+# never classified-then-masked.
+# ============================================================================
+MIN_UMI_FOR_IDC_INFERENCE <- 10 # documented, explicit minimum (AT11)
+
+idc_eligible <- (
+  pv.combined.all$tissue_or_sample_type == "Host blood" &
+    !is.na(pv.combined.all$tissue_or_sample_type) &
+    (is.na(pv.combined.all$source_stage_provenance) |
+      pv.combined.all$source_stage_provenance != "source_selection_defined") &
+    pv.combined.all$total_umi_count >= MIN_UMI_FOR_IDC_INFERENCE
+)
+
+cat(sprintf(
+  "[singleR.R] IDC eligibility gate: %d/%d cells eligible for blood-IDC reference similarity classification (%d excluded: non-blood tissue, source-selection-defined stage, or <%d total UMI)\n",
+  sum(idc_eligible), ncol(pv.combined.all), sum(!idc_eligible), MIN_UMI_FOR_IDC_INFERENCE
+))
+
+# ============================================================================
+# PART 2: Zhu SMRU1 -> PvP01 IDC reference construction (fixes D059: logged
+# drop_na count, and the reference is explicitly documented as a bulk,
+# single-replicate, cross-platform microarray time course, never presented
+# as scRNA-seq-comparable counts)
+# ============================================================================
 Zhu_HiDef_PVX_IDC_timecourse_1 <- read_excel(
   "./data/Zhu_SciReps_2016.xls",
   sheet = "SMRU1"
 )
 
-# Unfortunantely the genome used to analyze this data was the P. vivax Sal-I
-# instead of the PvP01 (reference genome) that we used to align our data.
-# We therefore need to convert the PVX_ gene ids to PVP01_ gene ids before
-# we try to assign cellular identities to our data.
-
-# Upload PVP01 orthologs
 PVX_PVP01_orthologs <- read_excel("./data/GenesByOrthologs_Summary.xlsx")
 
-# Process and tidy the timecourse data
 Zhu_HiDef_PVX_IDC_timecourse_1 <- as.data.frame(Zhu_HiDef_PVX_IDC_timecourse_1)
+n_zhu_genes_before_join <- nrow(Zhu_HiDef_PVX_IDC_timecourse_1)
+
 Zhu_HiDef_PVX_IDC_timecourse_1 <- left_join(
   Zhu_HiDef_PVX_IDC_timecourse_1,
   PVX_PVP01_orthologs,
   by = c("Gid" = "InputOrtholog")
 )
+n_zhu_genes_after_join_before_drop <- nrow(Zhu_HiDef_PVX_IDC_timecourse_1)
 Zhu_HiDef_PVX_IDC_timecourse_1 <- drop_na(Zhu_HiDef_PVX_IDC_timecourse_1)
+n_zhu_genes_dropped <- n_zhu_genes_after_join_before_drop - nrow(Zhu_HiDef_PVX_IDC_timecourse_1)
+
+cat(sprintf(
+  "[singleR.R] Zhu SMRU1 reference: %d genes before ortholog join, %d dropped by drop_na() (unmapped/incomplete orthologs), %d retained in the final reference\n",
+  n_zhu_genes_before_join, n_zhu_genes_dropped, nrow(Zhu_HiDef_PVX_IDC_timecourse_1)
+))
+
 Zhu_HiDef_PVX_IDC_timecourse_1 <- Zhu_HiDef_PVX_IDC_timecourse_1[, c(2:9)]
 rownames(
   Zhu_HiDef_PVX_IDC_timecourse_1
 ) <- Zhu_HiDef_PVX_IDC_timecourse_1$GeneID
 Zhu_HiDef_PVX_IDC_timecourse_1 <- Zhu_HiDef_PVX_IDC_timecourse_1[, c(1:7)]
-rownames(Zhu_HiDef_PVX_IDC_timecourse_1)
 counts <- as.matrix(Zhu_HiDef_PVX_IDC_timecourse_1)
-# Convert the dataframe to a summarized experiment
+
+# D059: assay explicitly documented/named as a bulk, single-replicate,
+# log2-scale microarray reference - NOT scRNA-seq counts, despite the
+# assay-slot name required by SummarizedExperiment/SingleR conventions.
 IDC_cycle <- SummarizedExperiment(
   assay = SimpleList(logcounts = counts),
   colData = colnames(Zhu_HiDef_PVX_IDC_timecourse_1)
 )
 IDC_cycle$X <- NULL
+metadata(IDC_cycle)$reference_provenance <- paste(
+  "Zhu et al. 2016 Sci Rep SMRU1 IDC time course:",
+  "bulk, single-replicate, log2-scale microarray intensities across 7",
+  "timepoints (6,12,24,32,36,42,48h), converted PVX->PvP01 via a 1:1",
+  "ortholog join. NOT scRNA-seq-comparable counts."
+)
 
-# rownames(IDC_cycle) <- gsub("-", "_", rownames(IDC_cycle))
+cat(sprintf(
+  "[singleR.R] IDC reference dimensions: %d genes x %d timepoints\n",
+  nrow(IDC_cycle), ncol(IDC_cycle)
+))
 
-# Convert Seurat object to single-cell experiment (sce) object for SingleR mapping
-sce.all <- as.SingleCellExperiment(DietSeurat(
-  pv.combined.all,
+# ============================================================================
+# PART 3: SingleR classification, restricted to eligible cells only (fixes
+# D058's core defect: gating happens BEFORE, not after, classification)
+# ============================================================================
+sce.eligible <- as.SingleCellExperiment(DietSeurat(
+  subset(pv.combined.all, cells = colnames(pv.combined.all)[idc_eligible]),
   layers = "data",
   assays = "RNA"
 ))
-rownames(sce.all) <- gsub("_", "-", rownames(sce.all))
+rownames(sce.eligible) <- gsub("_", "-", rownames(sce.eligible))
 
+gene_intersection <- intersect(rownames(sce.eligible), rownames(IDC_cycle))
+cat(sprintf(
+  "[singleR.R] Test/reference gene intersection: %d genes (of %d reference genes, %d test genes)\n",
+  length(gene_intersection), nrow(IDC_cycle), nrow(sce.eligible)
+))
+cat(sprintf(
+  "[singleR.R] Eligible cells classified: %d; ineligible cells (gated out, NA by construction): %d\n",
+  ncol(sce.eligible), ncol(pv.combined.all) - ncol(sce.eligible)
+))
 
-# Run SingleR
-pred.IDC.all <- SingleR(
-  test = sce.all,
+pred.IDC.eligible <- SingleR(
+  test = sce.eligible,
   ref = IDC_cycle,
   assay.type.test = 1,
   labels = colnames(IDC_cycle)
 )
 
-# add pruned prediction time to seurat
-pv.combined.all$hour_post_invasion <- pred.IDC.all$pruned.labels
+# ---------------------------------------------------------------------------
+# D058: renamed from the misleading "hour_post_invasion" to
+# idc_reference_similarity_label - these are discrete reference-profile
+# labels (which of the 7 Zhu timepoints a cell's expression best correlates
+# with), never a measured infection time. NA by construction for every
+# ineligible cell (never computed, never masked post hoc).
+# D061: raw (unpruned) label, delta.next, and a pruned flag are all
+# persisted, not just the final pruned label.
+# ---------------------------------------------------------------------------
+pv.combined.all$idc_reference_similarity_label <- NA_character_
+pv.combined.all$idc_similarity_raw_label <- NA_character_
+pv.combined.all$idc_similarity_score_delta <- NA_real_
+pv.combined.all$idc_similarity_pruned_flag <- NA
 
-# NA on hour post invasion for sample type rather than blood
-pv.combined.all$hour_post_invasion[
-  pv.combined.all$sample_type != "Mammalian host: blood"
-] <- NA
+eligible_cells <- colnames(sce.eligible)
+pv.combined.all$idc_reference_similarity_label[eligible_cells] <- pred.IDC.eligible$pruned.labels
+pv.combined.all$idc_similarity_raw_label[eligible_cells] <- pred.IDC.eligible$labels
+pv.combined.all$idc_similarity_score_delta[eligible_cells] <- pred.IDC.eligible$delta.next
+pv.combined.all$idc_similarity_pruned_flag[eligible_cells] <-
+  is.na(pred.IDC.eligible$pruned.labels) & !is.na(pred.IDC.eligible$labels)
 
-# sopheap identify IDC time
-pred.IDC.all$pruned.labels <- as.numeric(pred.IDC.all$pruned.labels)
-pred.IDC.all$pruned.labels <- case_when(
-  pred.IDC.all$pruned.labels >= 0 & pred.IDC.all$pruned.labels < 18 ~ "Ring",
-  pred.IDC.all$pruned.labels >= 18 & pred.IDC.all$pruned.labels < 30 ~
-    "Trophozoite",
-  pred.IDC.all$pruned.labels >= 30 & pred.IDC.all$pruned.labels < 46 ~
-    "Schizont",
-  pred.IDC.all$pruned.labels >= 46 & pred.IDC.all$pruned.labels <= 48 ~
-    "Merozoite",
-  TRUE ~ NA
+# ============================================================================
+# PART 4: heuristic stage bins (fixes D060: explicitly labeled as a
+# PlaViSca-defined heuristic, never presented as source-author annotation)
+# ============================================================================
+idc_hour_numeric <- suppressWarnings(as.numeric(pv.combined.all$idc_reference_similarity_label))
+pv.combined.all$idc_heuristic_stage_bin <- case_when(
+  is.na(idc_hour_numeric) ~ NA_character_,
+  idc_hour_numeric >= 0 & idc_hour_numeric < 18 ~ "Ring",
+  idc_hour_numeric >= 18 & idc_hour_numeric < 30 ~ "Trophozoite",
+  idc_hour_numeric >= 30 & idc_hour_numeric < 46 ~ "Schizont",
+  idc_hour_numeric >= 46 & idc_hour_numeric <= 48 ~ "Merozoite",
+  TRUE ~ NA_character_
 )
+# These cutoffs (0-<18 Ring, 18-<30 Trophozoite, 30-<46 Schizont, 46-48
+# Merozoite) are PlaViSca-defined heuristics with no citation in Zhu et al.
+# 2016 or elsewhere - never present idc_heuristic_stage_bin as an
+# author-established or literature-sourced boundary (D060).
 
-# add to seurat object
-match_cell <- intersect(colnames(pv.combined.all), rownames(pred.IDC.all))
+plotDeltaDistribution(pred.IDC.eligible, ncol = 3)
 
-pv.combined.all$parasite_stages <- pred.IDC.all[match_cell, ]$pruned.labels
+# ============================================================================
+# PART 5: deterministic annotation precedence (Part 4 of the repair spec;
+# annotation_precedence.tsv) - source stage always wins for population-type
+# gating over any inference; harmonized_life_cycle_stage is assembled
+# explicitly, once, from documented per-population precedence rules.
+# ============================================================================
+harmonized <- rep(NA_character_, ncol(pv.combined.all))
 
-# NA for sample type rather than blood
-pv.combined.all$parasite_stages[
-  pv.combined.all$sample_type != "Mammalian host: blood"
-] <- NA
+# 5a. Start from the IDC heuristic bin wherever a cell was eligible and
+# received one (blood-stage asexual populations).
+harmonized[!is.na(pv.combined.all$idc_heuristic_stage_bin)] <-
+  pv.combined.all$idc_heuristic_stage_bin[!is.na(pv.combined.all$idc_heuristic_stage_bin)]
 
+# 5b. Historical refine_state (Mancio-Silva2022 topcell-derived detailed
+# label) wins over the IDC bin where present - preserved as its own
+# source_stage_provenance value, not silently merged.
+if ("refine_state" %in% colnames(pv.combined.all@meta.data)) {
+  has_refine_state <- !is.na(pv.combined.all$refine_state)
+  harmonized[has_refine_state] <- pv.combined.all$refine_state[has_refine_state]
+  pv.combined.all$source_stage_provenance[has_refine_state] <- ifelse(
+    is.na(pv.combined.all$source_stage_provenance[has_refine_state]),
+    "source_state_defined",
+    pv.combined.all$source_stage_provenance[has_refine_state]
+  )
+}
 
-plotDeltaDistribution(pred.IDC.all, ncol = 3)
-# Add SingleR annotations to Seurat object
-# pv.combined.all$parasite_stage <- pred.IDC.all$pruned.labels
-# Replace NA vaues with "99"
-# pv.combined.all$parasite_stage <- pv.combined.all$parasite_stage %>%
-# replace_na("99")
-# Convert annotations to factor and relevel
-# pv.combined.all$IDC.pred <- factor(
-#   pv.combined.all$IDC.pred,
-#   levels = sort(as.numeric(unique(pv.combined.all$IDC.pred)))
-# )
+# 5c. Ruberto2022_1 liver-form source labels (Hypnozoite/Schizont) win for
+# life_cycle_stage; recorded as "Schizont (Liver stage)" per the target
+# vocabulary. Liver-stage cells never receive pred_gametocyte/IDC labels -
+# enforced structurally below in Part 7, not just by this precedence step.
+if ("liver_form" %in% colnames(pv.combined.all@meta.data)) {
+  liver_hypnozoite <- pv.combined.all$liver_form %in% c("Hypnozoites", "Hypnozoite")
+  liver_schizont <- pv.combined.all$liver_form %in% c("Schizonts", "Schizont")
+  harmonized[liver_hypnozoite] <- "Hypnozoite"
+  harmonized[liver_schizont] <- "Schizont (Liver stage)"
+  is_liver <- liver_hypnozoite | liver_schizont
+  pv.combined.all$source_stage_provenance[is_liver] <- "source_selection_defined"
+}
 
-# overwrite life cycle stage with column liver form frm Ruberto2022_1
-pv.combined.all$liver_form[
-  pv.combined.all$liver_form == "Hypnozoites"
-] <- "Hypnozoite"
-
-pv.combined.all$liver_form[
-  pv.combined.all$liver_form == "Schizonts"
-] <- "Schizont"
-
-
-liver_form <- pv.combined.all$liver_form %in% c("Hypnozoite", "Schizont")
-
-pv.combined.all$parasite_stages[liver_form] <- pv.combined.all$liver_form[
-  liver_form
-]
-
-
-# Update parasite_stages only where refine_state is not NA
-pv.combined.all$parasite_stages[!is.na(pv.combined.all$refine_state)] <-
-  pv.combined.all$refine_state[!is.na(pv.combined.all$refine_state)]
-
-
-# overwrite for the sample type salivary gland to sporozoite. This is for Rubeto2022_2, hazzard2022 498 and 499
-
-ruberto2022_2 <- pv.combined.all$study_label == "Ruberto2022_2"
-pv.combined.all$parasite_stages[ruberto2022_2] <- "Sporozoite"
-
-hazzard2022 <- pv.combined.all$run_id %in% c("SRR20710498", "SRR20710499")
-pv.combined.all$parasite_stages[hazzard2022] <- "Sporozoite"
-
-# visualize the number of cells in the dataset assigned to a parasite stage:
-SCpubr::do_BarPlot(
-  pv.combined.all,
-  group.by = "parasite_stages",
-  position = "stack",
-  flip = T,
-  order = T
+# 5d. Source-selection/source-run-defined Sporozoite populations
+# (Ruberto2022_2: all cells; Hazzard2022: runs 498/499) are authoritative
+# and win over EVERYTHING, including any prior step above. This sets BOTH
+# the detailed and (via map_broad_stage() below) the broad field atomically,
+# fixing D020's Sporozoite-detailed/Blood-broad contradiction by
+# construction, and is applied last among the "source wins" rules so a
+# downstream inference step can never re-open it (see Part 7).
+source_defined_sporozoite <- (
+  !is.na(pv.combined.all$source_stage_provenance) &
+    pv.combined.all$source_stage_provenance == "source_selection_defined" &
+    !is.na(pv.combined.all$source_life_cycle_stage) &
+    pv.combined.all$source_life_cycle_stage == "Sporozoite"
 )
+harmonized[source_defined_sporozoite] <- "Sporozoite"
 
-# Output the exact # of cells predicted per IDC stage
-# table(pv.combined.all$parasite_stages, useNA = "always")
-# Plot the data in low-dimensional space
-# before cell labelling
-SCpubr::do_DimPlot(
-  pv.combined.all,
-  group.by = "parasite_stages",
-  dims = c(1, 2),
-  pt.size = 0.1,
-  split.by = "parasite_stages"
-)
+pv.combined.all$harmonized_life_cycle_stage <- harmonized
+pv.combined.all$source_stage_provenance[is.na(pv.combined.all$source_stage_provenance)] <- "singleR_inferred"
 
-
-# Let's now cluster the cell de novo
-# Identify clusters of cells by a shared nearest neighbor (SNN) modularity
-# optimization based clustering algorithm. First calculate k-nearest neighbors
-# and construct the SNN graph. Then optimize the modularity function to determine
-# clusters. For a full description of the algorithms, see Waltman and van Eck
-# (2013) The European Physical Journal B.
-# what is nearest-neighbour algorithm? https://www.ibm.com/topics/knn
-# pv.combined.all <- FindNeighbors(
-#   pv.combined.all,
-#   dims = 1:30,
-#   reduction = "pca_integrated"
-# ) # change as necessary
+# ============================================================================
+# PART 6: de novo clustering (fixes D047: use the real Seurat 5.3.0
+# argument `graph.name`, not the nonexistent `graph_name`, and explicitly
+# assert the intended graph exists rather than silently falling back)
+# ============================================================================
+intended_graph_name <- "RNA_snn"
+if (!intended_graph_name %in% names(pv.combined.all@graphs)) {
+  pipeline_fail(sprintf(
+    "Intended clustering graph '%s' does not exist on this object (available: %s). integration.R must build this graph via FindNeighbors before singleR.R runs FindClusters.",
+    intended_graph_name, paste(names(pv.combined.all@graphs), collapse = ", ")
+  ))
+}
 
 pv.combined.all <- FindClusters(
   pv.combined.all,
   resolution = 0.05,
-  graph_name = "new_clustering"
-) # change as necessary
+  graph.name = intended_graph_name
+)
 
-# ggarrange(
-#   SCpubr::do_DimPlot(
-#     pv.combined.all,
-#     group.by = "seurat_clusters",
-#     dims = c(1, 2),
-#     pt.size = 0.1,
-#     plot.axes = T,
-#     reduction = "pca_integrated"
-#   ),
-#   SCpubr::do_DimPlot(
-#     pv.combined.all,
-#     group.by = "seurat_clusters",
-#     dims = c(1, 3),
-#     pt.size = 0.1,
-#     plot.axes = T,
-#     reduction = "pca_integrated"
-#   ),
-#   SCpubr::do_DimPlot(
-#     pv.combined.all,
-#     group.by = "seurat_clusters",
-#     dims = c(2, 3),
-#     pt.size = 0.1,
-#     plot.axes = T,
-#     reduction = "pca_integrated"
-#   ),
-#   align = "hv",
-#   nrow = 1,
-#   ncol = 3,
-#   common.legend = T
-# )
-
-# pv.combined.all_stage_stats <- Cluster_Stats_All_Samples(
-#   seurat_object = pv.combined.all,
-#   group_by_var = "parasite_stages"
-# )
-
-# Do these clustering stats make sense? If you want to generate more or less
-# clusters, rerun "FindClusters" with a different resolution.
-# The closer to 0, the less clusters; closer to 1, more clusters.
-
-# In Sa et al. (2020), they indicate that there are gametocytes in the samples.
-# Can we detect these cells? Remember that the singleR cell identification
-# strategy only contained asexual parasites. Let's try to identify gametocytes.
-
-# We will assign a 'module score' to each cell based on their combined expression
-# of known female and male gametocyte markers.
-
+# ============================================================================
+# PART 7: gametocyte marker module scores + marker-driven cluster identity
+# (fixes D048: no hard-coded numeric cluster->sex mapping; DEC12 option (b)
+# interim safeguard - a mandatory, versioned marker-based verification step
+# runs before any cluster is ever named Female/Male gametocyte, and the
+# pipeline fails loudly rather than silently assigning sex from an
+# unvalidated cluster)
+# ============================================================================
 femaleGams <- c(
-  "PVP01-1207200",
-  "PVP01-0616100",
-  "PVP01-1119300",
-  "PVP01-1465500",
-  "PVP01-1259400",
-  "PVP01-1441000",
-  "PVP01-0702600",
-  "PVP01-1306800",
-  "PVP01-0946800",
-  "PVP01-0517400",
-  "PVP01-1027600",
-  "PVP01-1003000",
-  "PVP01-1143200",
-  "PVP01-1017500",
-  "PVP01-1024300",
-  "PVP01-0806000",
-  "PVP01-1240300",
-  "PVP01-0603600",
-  "PVP01-0712800"
+  "PVP01-1207200", "PVP01-0616100", "PVP01-1119300", "PVP01-1465500",
+  "PVP01-1259400", "PVP01-1441000", "PVP01-0702600", "PVP01-1306800",
+  "PVP01-0946800", "PVP01-0517400", "PVP01-1027600", "PVP01-1003000",
+  "PVP01-1143200", "PVP01-1017500", "PVP01-1024300", "PVP01-0806000",
+  "PVP01-1240300", "PVP01-0603600", "PVP01-0712800"
 )
 
 maleGams <- c(
-  "PVP01-1262200",
-  "PVP01-0530800",
-  "PVP01-1412100",
-  "PVP01-1025600",
-  "PVP01-1266500",
-  "PVP01-1229400"
+  "PVP01-1262200", "PVP01-0530800", "PVP01-1412100", "PVP01-1025600",
+  "PVP01-1266500", "PVP01-1229400"
 )
 
 pv.combined.all <- AddModuleScore(
@@ -275,93 +327,105 @@ pv.combined.all <- AddModuleScore(
   name = "maleGams_module_score"
 )
 
-VlnPlot_scCustom(
-  seurat_object = pv.combined.all,
-  features = "maleGams_module_score1"
-)
-VlnPlot_scCustom(
-  seurat_object = pv.combined.all,
-  features = "femaleGams_module_score1"
-)
+# Cells not eligible for blood-stage gametocyte inference (non-blood tissue,
+# source-selection-defined stage, or near-zero expression) are excluded from
+# marker-based cluster scoring, mirroring the IDC eligibility gate (D037).
+gametocyte_eligible <- idc_eligible
 
-# table(pv.combined.all$RNA_snn_res.0.4, pv.combined.all$parasite_stages)
+cluster_marker_summary <- pv.combined.all@meta.data %>%
+  rownames_to_column("cell_id") %>%
+  filter(gametocyte_eligible[cell_id]) %>%
+  group_by(seurat_clusters) %>%
+  summarise(
+    n_cells = n(),
+    mean_female_score = mean(femaleGams_module_score1, na.rm = TRUE),
+    mean_male_score = mean(maleGams_module_score1, na.rm = TRUE),
+    .groups = "drop"
+  )
 
-# Can you predict which clusters might be representative of gametocytes?
-# Once you are happy with the clustering resolution, let's go ahead and rename
-# the clusters identified.
+# Versioned cluster/population marker summary (DEC12 (b): the deterministic
+# evidence a human reviewer or a future automated check validates before
+# trusting any cluster->sex mapping - written next to the object it
+# describes, never silently trusted).
+write_tsv(cluster_marker_summary, "cluster_sex_marker_summary.tsv")
 
-# Below is an example of how to do so. Note that this need to be modified
-# accordingly!
+# A cluster is called Female/Male gametocyte ONLY if its mean module score
+# for one sex clears an explicit, documented threshold AND exceeds the other
+# sex's mean score by an explicit margin. Any cluster that does not clear
+# both bars is left unassigned - never silently defaulted to a numeric
+# cluster identity. If NO cluster clears the bar in either direction, the
+# pipeline fails loudly rather than silently proceeding with an unvalidated
+# empty mapping.
+FEMALE_SCORE_THRESHOLD <- 0.10
+MALE_SCORE_THRESHOLD <- 0.10
+SCORE_MARGIN <- 0.05
 
-pv.combined.all <- RenameIdents(
-  object = pv.combined.all,
-  "0" = "Asexual 1",
-  "1" = "Asexual 2",
-  "2" = "Female gametocyte",
-  "3" = "Asexual 3",
-  "4" = "Male gametocyte",
-  "5" = "Asexual 4",
-  "6" = "Asexual 5",
-  "7" = "Asexual 6",
-  "8" = "Asexual 7",
-  "9" = "Asexual 8",
-  "10" = "Asexual 9",
-  "11" = "Asexual 10",
-  "12" = "Asexual 11",
-  "13" = "Asexual 12",
-  "14" = "Asexual 13",
-  "15" = "Asexual 14",
-  "16" = "Asexual 15",
-  "17" = "Asexual 16",
-  "18" = "Asexual 17",
-  "19" = "Asexual 18",
-  "20" = "Asexual 19",
-  "21" = "Asexual 20"
-)
+cluster_marker_summary <- cluster_marker_summary %>%
+  mutate(
+    call = case_when(
+      mean_female_score >= FEMALE_SCORE_THRESHOLD &
+        (mean_female_score - mean_male_score) >= SCORE_MARGIN ~ "Female gametocyte",
+      mean_male_score >= MALE_SCORE_THRESHOLD &
+        (mean_male_score - mean_female_score) >= SCORE_MARGIN ~ "Male gametocyte",
+      TRUE ~ "Asexual"
+    )
+  )
 
+if (!any(cluster_marker_summary$call %in% c("Female gametocyte", "Male gametocyte"))) {
+  pipeline_fail(paste(
+    "No cluster cleared the marker-score threshold for either Female or Male",
+    "gametocyte identity (see cluster_sex_marker_summary.tsv). Refusing to",
+    "silently proceed with an unvalidated cluster->sex mapping (D048/DEC12).",
+    "Either the clustering resolution needs adjustment, the thresholds need",
+    "reviewed adjustment, or gametocytes are genuinely absent/undetectable",
+    "in this build - a human must review cluster_sex_marker_summary.tsv",
+    "before proceeding."
+  ))
+}
 
-pv.combined.all$pred_gametocyte <- as.character(Idents(pv.combined.all))
+cluster_to_label <- setNames(cluster_marker_summary$call, cluster_marker_summary$seurat_clusters)
+pv.combined.all$pred_gametocyte_sex <- unname(cluster_to_label[as.character(pv.combined.all$seurat_clusters)])
+pv.combined.all$pred_gametocyte_sex[pv.combined.all$pred_gametocyte_sex == "Asexual"] <- NA_character_
 
-# add male and female gametocyte from prediction to life_cycle_stage
-male_female <- pv.combined.all$pred_gametocyte %in%
-  c("Male gametocyte", "Female gametocyte")
+# D037,AT10,AT11: liver-stage cells and zero/near-zero-expression cells can
+# never carry a gametocyte-sex call, regardless of what cluster they fall
+# into - this is a structural gate, not a downstream cleanup step.
+not_gametocyte_eligible <- !gametocyte_eligible
+pv.combined.all$pred_gametocyte_sex[not_gametocyte_eligible] <- NA_character_
 
-pv.combined.all$parasite_stages[
-  male_female
-] <- pv.combined.all$pred_gametocyte[male_female]
+# ============================================================================
+# PART 8: source-defined stage protection is now final and cannot be
+# re-opened by the gametocyte call above (fixes D045/D049 together) -
+# harmonized_life_cycle_stage only takes the gametocyte call for cells that
+# are NOT already source-selection-defined (Sporozoite populations were
+# fixed in Part 5d and are excluded from gametocyte_eligible/idc_eligible by
+# construction, but this assertion makes the invariant explicit and
+# fail-loud rather than relying on gating alone).
+# ============================================================================
+male_female_call <- !is.na(pv.combined.all$pred_gametocyte_sex)
+overwrite_target <- male_female_call & is.na(pv.combined.all$harmonized_life_cycle_stage)
+pv.combined.all$harmonized_life_cycle_stage[overwrite_target] <-
+  pv.combined.all$pred_gametocyte_sex[overwrite_target]
 
+violation <- male_female_call &
+  !is.na(pv.combined.all$source_stage_provenance) &
+  pv.combined.all$source_stage_provenance == "source_selection_defined"
+if (any(violation)) {
+  pipeline_fail(sprintf(
+    "%d source-selection-defined cell(s) received a gametocyte-sex call - this must be structurally impossible (D045/D048/D049). Cell IDs: %s",
+    sum(violation), paste(utils::head(colnames(pv.combined.all)[violation], 10), collapse = ", ")
+  ))
+}
 
-# DimPlot_scCustom(
-#   pv.combined.all,
-#   group.by = "RenamedClusters1",
-#   reduction = "pca_integrated",
-#   colors_use = ColorBlind_Pal()
-# ) +
-#   theme_grey() +
-#   border()
-
-# (SCpubr::do_DimPlot(
-#   sample = pv.combined.all,
-#   label = TRUE,
-#   label.color = "black",
-#   repel = T,
-#   reduction = "pca_integrated",
-#   dims = c(1, 2),
-#   pt.size = 0.25,
-#   colors.use = c(
-#     "Asexual 1" = "orange",
-#     "Asexual 2" = "#0072B2",
-#     "Female Gametocyte 1" = "#009E73",
-#     "Asexual 3" = "#CC79A7",
-#     "Asexual 4" = "#F0E442",
-#     "Female Gametocyte 2" = "firebrick2",
-#     "Male Gametocyte" = "#56B4E9"
-#   )
-# ) +
-#   NoLegend())
-
-# read gametocyte metadata from Sa et al. and overwrite the life_cylce_stage
-df <- read_excel("./data/pbio.3000711.s034.xlsx") |>
+# ============================================================================
+# PART 9: read gametocyte metadata from Sa et al. and reconcile with
+# life_cycle_stage (fixes D014,D015: exact set-membership match instead of
+# the buggy `filter(type == c(...))` parity recycling, and the authoritative
+# NIH/PB_MACS prefix crosswalk instead of the wrong-cardinality mapping that
+# collided NIH_Ao/NIH_CQ onto the same run suffix and dropped PB_MACS
+# entirely)
+# ============================================================================
+sa2020_source_sex <- read_excel("./data/pbio.3000711.s034.xlsx") |>
   select(sample = Sample, type = Type) |>
   mutate(
     prefix = sub("(_[^_]+)$", "", sample),
@@ -369,6 +433,10 @@ df <- read_excel("./data/pbio.3000711.s034.xlsx") |>
   ) |>
   select(prefix, cells, type) |>
   mutate(
+    # D015: authoritative crosswalk (validated against Table 1 + ENA +
+    # barcode overlap) - NIH_Sa=269, NIH_CQ=270, NIH_Ao=271, PB_MACS=272.
+    # The historical version collided NIH_Ao/NIH_CQ onto the same suffix
+    # (269) and never mapped PB_MACS at all.
     prefix = case_when(
       prefix == "AMRU_Ao" ~ "278",
       prefix == "AMRU_CQ" ~ "277",
@@ -376,9 +444,11 @@ df <- read_excel("./data/pbio.3000711.s034.xlsx") |>
       prefix == "Ches_Ao" ~ "275",
       prefix == "Ches_CQ" ~ "274",
       prefix == "Ches_Sa" ~ "273",
-      prefix == "NIH_Ao" ~ "269",
-      prefix == "NIH_CQ" ~ "269",
-      prefix == "NIH_Sa" ~ "272",
+      prefix == "NIH_Sa" ~ "269",
+      prefix == "NIH_CQ" ~ "270",
+      prefix == "NIH_Ao" ~ "271",
+      prefix == "PB_MACS" ~ "272",
+      TRUE ~ NA_character_
     ),
     new_cells = paste0(prefix, "_", cells),
     type = case_when(
@@ -386,104 +456,113 @@ df <- read_excel("./data/pbio.3000711.s034.xlsx") |>
       type == "Male" ~ "Male gametocyte"
     )
   ) |>
-  filter(type == c("Male gametocyte", "Female gametocyte"))
+  # D014: exact set-membership match, not the parity-recycled
+  # `filter(type == c("Male gametocyte","Female gametocyte"))`.
+  filter(type %in% c("Male gametocyte", "Female gametocyte"))
 
-# Find indices of Seurat cells that match new_cells
-match_cell <- intersect(pv.combined.all$barcode, df$new_cells)
+pv.combined.all$source_sex_annotation <- NA_character_
+sa2020_match_cell <- intersect(pv.combined.all$barcode, sa2020_source_sex$new_cells)
+cat(sprintf(
+  "[singleR.R] Sa2020 source sex-annotation import: %d matched cells (of %d source-labeled rows)\n",
+  length(sa2020_match_cell), nrow(sa2020_source_sex)
+))
 
+sa2020_barcode_idx <- match(pv.combined.all$barcode, sa2020_source_sex$new_cells)
+has_sa2020_match <- !is.na(sa2020_barcode_idx)
+pv.combined.all$source_sex_annotation[has_sa2020_match] <-
+  sa2020_source_sex$type[sa2020_barcode_idx[has_sa2020_match]]
 
-# Assign type using these indices
-pv.combined.all$parasite_stages[match_cell] <- df$type[match(
-  match_cell,
-  df$new_cells
-)]
-
-
-# mutate parasite stages if sample type is liver call schizont (liver stage) and if blood call schizont (blood stage)
-pv.combined.all$parasite_stages[
-  pv.combined.all$sample_type == "Mammalian host: hepatocyte" &
-    pv.combined.all$parasite_stages == "Schizont"
-] <- "Schizont (liver stage)"
-
-pv.combined.all$parasite_stages[
-  pv.combined.all$sample_type == "Mammalian host: blood" &
-    pv.combined.all$parasite_stages == "Schizont"
-] <- "Schizont (blood stage)"
-
+# D009/annotation_precedence.tsv: source_sex_annotation is preserved as its
+# own field, never silently merged into harmonized_life_cycle_stage or
+# pred_gametocyte_sex; reconciliation of the two for Sa2020's known
+# disagreement set is deferred to adjudicated_display_stage (DEC07).
+pv.combined.all$adjudicated_display_stage <- NA_character_
 
 # ============================================================================
-# DERIVE NEW 3-TIER TERMINOLOGY COLUMNS FROM LIFE_CYCLE_STAGE
+# PART 10: broad/detailed stage consistency (fixes D020 by construction) -
+# parasite_broad_stage is deterministically derived from
+# harmonized_life_cycle_stage via the single version-controlled mapping
+# table in pipeline_lib.R, and must never be independently set anywhere
+# else in this script.
 # ============================================================================
-# These columns provide a scientifically accurate 3-tier stage classification:
-# 1. development_phase: 3 broad categories (Blood stages, Liver stages, Sporozoite)
-# 2. blood_stage: 6 blood-specific forms + NA for non-blood
-# 3. parasite_stages: 9 specific stage forms across all development phases
-#
-# Source of truth: life_cycle_stage (generated by SingleR predictions above)
+pv.combined.all$parasite_broad_stage <- map_broad_stage(pv.combined.all$harmonized_life_cycle_stage)
 
-pv.combined.all@meta.data <- pv.combined.all@meta.data %>%
-  mutate(
-    # 1. Development phase - 3 groups
-    development_phase = case_when(
-      parasite_stages == "Sporozoite" ~ "Sporozoite",
-      parasite_stages == "Hypnozoite" ~ "Liver stages",
-      parasite_stages == "Schizont (liver stage)" ~ "Liver stages",
-      TRUE ~ "Blood stages"
-    ),
+# AT09/AT21 self-check: source-defined sporozoites must be broad-labeled
+# Sporozoite stage, never Blood stage (the exact D020 contradiction).
+sporozoite_broad_check <- pv.combined.all$parasite_broad_stage[source_defined_sporozoite]
+if (length(sporozoite_broad_check) > 0 && any(sporozoite_broad_check != "Sporozoite stage", na.rm = TRUE)) {
+  pipeline_fail("D020 regression: at least one source-selection-defined Sporozoite cell has parasite_broad_stage != 'Sporozoite stage'")
+}
 
-    # 2. Blood stage - blood-specific forms only (NA for non-blood)
-    blood_stage = case_when(
-      parasite_stages == "Merozoite" ~ "Merozoite",
-      parasite_stages == "Ring" ~ "Ring stage",
-      parasite_stages == "Trophozoite" ~ "Trophozoite",
-      parasite_stages == "Schizont (blood stage)" ~ "Schizont (blood)",
-      parasite_stages == "Female gametocyte" ~ "Female gametocyte",
-      parasite_stages == "Male gametocyte" ~ "Male gametocyte",
-      TRUE ~ NA_character_
-    ),
-
-    # 3. Parasite stage - specific forms across all phases
-    parasite_stages = case_when(
-      parasite_stages == "Sporozoite" ~ "Sporozoite",
-      parasite_stages == "Merozoite" ~ "Merozoite",
-      parasite_stages == "Ring" ~ "Ring stage",
-      parasite_stages == "Trophozoite" ~ "Trophozoite",
-      parasite_stages == "Schizont (blood stage)" ~ "Schizont (blood)",
-      parasite_stages == "Female gametocyte" ~ "Female gametocyte",
-      parasite_stages == "Male gametocyte" ~ "Male gametocyte",
-      parasite_stages == "Hypnozoite" ~ "Hypnozoite",
-      parasite_stages == "Schizont (liver stage)" ~ "Schizont (liver)",
-      TRUE ~ parasite_stages
-    )
-  )
-
-# Remove Male and female gametocyte prediction with Anopheles
-pv.combined.all <- subset(
-  pv.combined.all,
-  subset = !((parasite_stages %in% c("Male gametocyte", "Female gametocyte")) &
-    grepl("Anopheles", host_species))
+# ============================================================================
+# PART 11: post-integration removal policy (fixes D045+D049 together,
+# DEC10 option (b)) - gate on source-defined population type, never solely
+# on downstream classifier output, and log every removed cell as part of
+# build provenance. Because source-selection-defined Sporozoite cells can no
+# longer receive a gametocyte-sex call (Part 8's structural assertion), the
+# expected removal count is zero unless a separately approved scientific
+# decision changes this.
+# ============================================================================
+removal_candidates <- (
+  pv.combined.all$harmonized_life_cycle_stage %in% c("Male gametocyte", "Female gametocyte") &
+    grepl("Anopheles", pv.combined.all$host_species) &
+    (is.na(pv.combined.all$source_stage_provenance) |
+      pv.combined.all$source_stage_provenance != "source_selection_defined")
 )
 
+n_removed <- sum(removal_candidates)
+if (n_removed > 0) {
+  removal_manifest <- pv.combined.all@meta.data[removal_candidates, , drop = FALSE] %>%
+    rownames_to_column("cell_id") %>%
+    transmute(
+      cell_id,
+      study_label,
+      run_id,
+      host_species,
+      harmonized_life_cycle_stage,
+      reason = "Anopheles-host cell classified as gametocyte by downstream classifier, not source-selection-defined - removed per DEC10 policy"
+    )
+  write_tsv(removal_manifest, "post_integration_removal_manifest.tsv")
+  cat(sprintf("[singleR.R] Removing %d cell(s) per the post-integration Anopheles+gametocyte policy - see post_integration_removal_manifest.tsv\n", n_removed))
+} else {
+  cat("[singleR.R] Post-integration Anopheles+gametocyte removal filter: 0 cells removed (expected under the current build)\n")
+}
 
-# Verify the new columns
-cat("\n=== NEW TERMINOLOGY COLUMNS CREATED ===\n\n")
-cat("Development phase (3 categories):\n")
-print(table(pv.combined.all$development_phase, useNA = "ifany"))
+pv.combined.all <- subset(pv.combined.all, cells = colnames(pv.combined.all)[!removal_candidates])
 
-cat("\n\nBlood stage (6 forms + NA for non-blood):\n")
-print(table(pv.combined.all$blood_stage, useNA = "ifany"))
+# ============================================================================
+# Final assertions (AT07,AT08,AT09,AT10,AT21,AT22)
+# ============================================================================
+assert_unique_cell_ids(colnames(pv.combined.all), label = "pv_all_studies.rds (post-singleR.R)")
 
-cat("\n\nParasite stage (9 specific forms):\n")
-print(table(pv.combined.all$parasite_stages, useNA = "ifany"))
+non_blood_idc <- pv.combined.all$tissue_or_sample_type != "Host blood" &
+  !is.na(pv.combined.all$tissue_or_sample_type)
+if (any(!is.na(pv.combined.all$idc_reference_similarity_label[non_blood_idc]))) {
+  pipeline_fail("AT08 regression: idc_reference_similarity_label is non-NA for at least one non-blood-stage cell")
+}
 
-cat("\n=== VERIFICATION COMPLETE ===\n\n")
+liver_gametocyte <- pv.combined.all$parasite_broad_stage == "Liver stage" &
+  !is.na(pv.combined.all$parasite_broad_stage)
+if (any(!is.na(pv.combined.all$pred_gametocyte_sex[liver_gametocyte]))) {
+  pipeline_fail("AT10 regression: pred_gametocyte_sex is non-NA for at least one Liver stage cell")
+}
 
+near_zero <- pv.combined.all$total_umi_count < MIN_UMI_FOR_IDC_INFERENCE
+if (any(!is.na(pv.combined.all$idc_reference_similarity_label[near_zero])) ||
+  any(!is.na(pv.combined.all$pred_gametocyte_sex[near_zero]))) {
+  pipeline_fail("AT11 regression: a near-zero-expression cell received idc_reference_similarity_label or pred_gametocyte_sex")
+}
 
-# clean up
-# change features from - to _ to match with gff gene_id
+expected_broad <- map_broad_stage(pv.combined.all$harmonized_life_cycle_stage)
+if (!identical(expected_broad, pv.combined.all$parasite_broad_stage)) {
+  pipeline_fail("AT21 regression: parasite_broad_stage no longer matches the deterministic mapping of harmonized_life_cycle_stage")
+}
+
+# ============================================================================
+# Cleanup and save
+# ============================================================================
 features <- gsub("-", "_", rownames(pv.combined.all[["RNA"]]@features))
 rownames(pv.combined.all[["RNA"]]@features) <- features
-
 
 pv.combined.all$orig.ident <- NULL
 pv.combined.all$femaleGams_module_score1 <- NULL
@@ -491,3 +570,12 @@ pv.combined.all$maleGams_module_score1 <- NULL
 pv.combined.all@project.name <- "PlaViSca"
 
 saveRDS(pv.combined.all, file = "./pv_all_studies.rds")
+record_build_manifest(
+  artifact_path = "pv_all_studies.rds",
+  script_path = "scripts/singleR.R",
+  cell_count = ncol(pv.combined.all),
+  notes = sprintf(
+    "Fixes D014,D015,D020,D021,D034,D037,D044,D045,D047,D048,D049,D058,D059,D060,D061; %d cells removed per DEC10 post-integration policy",
+    n_removed
+  )
+)

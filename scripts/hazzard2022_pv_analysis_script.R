@@ -14,7 +14,28 @@ library(SingleCellExperiment)
 
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
 ##### 2. Load annotation files
@@ -180,52 +201,66 @@ for (i in 1:length(all_pv)) {
 # After transforming the data, check out the dimensions of the new Seurat object.
 # How has the noumber of cells and the number of features changed?
 
-# Add metadata. Note: the same will need to be done for the other samples that we analyze.
-
-study_pmid <- rep(study_num, length(all_pv))
+# Add metadata via explicit per-run vectors, each keyed 1:1 to `samples`
+# (never recycled via paste0(NA), which silently produced the literal string
+# "NA" for day_post_infection/host_id - D024).
 run_id <- samples
+assert_cardinality(run_id, length(all_pv), label = "run_id")
 
-study_label <- rep("Hazzard2022", length(all_pv))
-num_srr <- rep(4, length(all_pv))
+study_label <- rep(STUDY_LABELS[["hazzard2022"]], length(all_pv))
 pub_year <- rep(2022, length(all_pv))
-geographic_location <- rep("USA_District of Columbia", length(all_pv))
-sc_technology <- rep("10x_Chomium_V3", length(all_pv))
-sequencer <- rep("Illumina NovaSeq 6000", length(all_pv))
+# D005/D023-style fix: registered vs publication-protocol sequencer kept as
+# two separate fields, never silently resolved. ENA registers HiSeq2500 for
+# runs 500/501 and NovaSeq6000 for 498/499; the publication text states
+# NovaSeq throughout - both are preserved, not merged.
+sequencer_registered <- c("Illumina NovaSeq 6000", "Illumina NovaSeq 6000", "Illumina HiSeq 2500", "Illumina HiSeq 2500")
+sequencer_protocol_publication <- rep("Illumina NovaSeq 6000", length(all_pv))
+sc_technology <- rep("10x_Chromium", length(all_pv))
 host_species <- c(
   "Anopheles freeborni",
   "Anopheles stephensi",
   "Saimiri boliviensis",
   "Saimiri boliviensis"
 )
-host_id <- rep(NA, length(all_pv))
 sample_type <- c(
   "Vector host: salivary gland",
   "Vector host: salivary gland",
   "Mammalian host: blood",
   "Mammalian host: blood"
 )
+tissue_or_sample_type <- c(
+  "Vector salivary gland",
+  "Vector salivary gland",
+  "Host blood",
+  "Host blood"
+)
 strain <- c("Sal1/Chesson", "Sal1/Chesson", "Sal1", "Sal1")
-day_post_infection <- rep(NA, length(all_pv))
-treatment <- rep("No_Treatment", length(all_pv))
-biological_replicate <- c(2, 1, 2, 1)
-
+biological_replicate_id <- c("2", "1", "2", "1")
 
 for (i in 1:length(all_pv)) {
-  all_pv[[i]]$study_pmid <- paste0(study_pmid[[i]])
-  all_pv[[i]]$run_id <- paste0(run_id[[i]])
-  all_pv[[i]]$study_label <- paste0(study_label[[i]])
-  all_pv[[i]]$num_srr <- paste0(num_srr[[i]])
-  all_pv[[i]]$pub_year <- paste0(pub_year[[i]])
-  all_pv[[i]]$geographic_location <- paste0(geographic_location[[i]])
-  all_pv[[i]]$sc_technology <- paste0(sc_technology[[i]])
-  all_pv[[i]]$sequencer <- paste0(sequencer[[i]])
-  all_pv[[i]]$host_species <- paste0(host_species[[i]])
-  all_pv[[i]]$host_id <- paste0(host_id[[i]])
-  all_pv[[i]]$sample_type <- paste0(sample_type[[i]])
-  all_pv[[i]]$strain <- paste0(strain[[i]])
-  all_pv[[i]]$day_post_infection <- paste0(day_post_infection[[i]])
-  all_pv[[i]]$treatment <- paste0(treatment[[i]])
-  all_pv[[i]]$biological_replicate <- paste0(biological_replicate[[i]])
+  n_cells <- ncol(all_pv[[i]])
+  assert_cardinality(colnames(all_pv[[i]]), n_cells, label = paste0("colnames(", i, ")"))
+
+  all_pv[[i]]$study_pmid <- rep(study_num, n_cells)
+  all_pv[[i]]$run_id <- rep(run_id[[i]], n_cells)
+  all_pv[[i]]$study_label <- rep(study_label[[i]], n_cells)
+  all_pv[[i]]$pub_year <- rep(pub_year[[i]], n_cells)
+  all_pv[[i]]$sc_technology <- rep(sc_technology[[i]], n_cells)
+  all_pv[[i]]$sequencer_registered <- rep(sequencer_registered[[i]], n_cells)
+  all_pv[[i]]$sequencer_protocol_publication <- rep(sequencer_protocol_publication[[i]], n_cells)
+  all_pv[[i]]$host_species <- rep(host_species[[i]], n_cells)
+  # D024: true NA - host_id/day_post_infection are genuinely undetermined at
+  # this preprocessing stage (D025: pending the remaining Hazzard2022
+  # publication/accession/QC/provenance reconciliation), never the literal
+  # string "NA".
+  all_pv[[i]]$host_id <- rep(NA_character_, n_cells)
+  all_pv[[i]]$day_post_infection <- rep(NA_integer_, n_cells)
+  all_pv[[i]]$sample_type <- rep(sample_type[[i]], n_cells)
+  all_pv[[i]]$tissue_or_sample_type <- rep(tissue_or_sample_type[[i]], n_cells)
+  all_pv[[i]]$strain <- rep(strain[[i]], n_cells)
+  all_pv[[i]]$treatment <- rep("No_Treatment", n_cells)
+  all_pv[[i]]$biological_replicate_id <- rep(biological_replicate_id[[i]], n_cells)
+  all_pv[[i]]$biological_replicate_type <- rep("infection", n_cells)
 
   all_pv[[i]]$barcode <- paste(
     str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
@@ -292,8 +327,28 @@ pv.combined.all <- JoinLayers(pv.combined.all)
 # pv.combined.all <- ScaleData(pv.combined.all)
 # pv.combined.all <- RunPCA(pv.combined.all)
 
+# D006-style geography split (never a combined field); D022's QC/inclusion
+# authority is explicitly deferred (DEC04/DEC08) - do not alter the QC
+# population while the publication/QC reconciliation remains incomplete.
+pv.combined.all$experimental_site <- "Walter Reed Army Institute of Research (Silver Spring, MD)"
+pv.combined.all$registry_location <- "USA: District of Columbia"
+pv.combined.all$sequencing_site <- NA_character_
+
+# Conservative Phase 1 membership policy: preserve the exact 3,294-cell
+# population; do not alter QC/inclusion while D022/DEC04/DEC08 remain open.
+assert_cell_count(ncol(pv.combined.all), 3294L, label = "hazzard2022.rds")
+assert_unique_cell_ids(colnames(pv.combined.all), label = "hazzard2022.rds colnames")
+assert_no_literal_na_string(pv.combined.all$host_id, label = "hazzard2022$host_id")
+assert_no_literal_na_string(pv.combined.all$day_post_infection, label = "hazzard2022$day_post_infection")
+
 # Save Seurat object
 saveRDS(pv.combined.all, file = "hazzard2022.rds")
+record_build_manifest(
+  artifact_path = "hazzard2022.rds",
+  script_path = "scripts/hazzard2022_pv_analysis_script.R",
+  cell_count = ncol(pv.combined.all),
+  notes = "Fixes D023,D024,D069 (true NA, registered-vs-publication sequencer split, technology spelling); D022 QC-authority explicitly deferred per DEC04/DEC08; D020/D021 broad-stage/HPI fixes live in singleR.R"
+)
 
 # Remove all object
 rm(list = ls())

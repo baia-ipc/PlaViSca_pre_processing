@@ -5,7 +5,28 @@ library(Seurat)
 library(scater)
 library(SingleCellExperiment)
 
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 rds_files <- list.files(pattern = "^hazzard2024_pv.*\\.rds$")
 
@@ -55,12 +76,29 @@ df <- read.delim("data/Proccessed_Data.txt") |>
     new_cells = paste0(prefix, "_", cells)
   )
 
+assert_no_missing_mandatory(df$new_cells, label = "df$new_cells (retained-cell crosswalk)")
+assert_unique_cell_ids(df$new_cells, label = "df$new_cells (retained-cell crosswalk)")
+
 pv.combined.all <- subset(
   pv.combined.all,
   cells = df$new_cells
 )
+
+# Conservative cell-membership policy for Phase 1: preserve the exact
+# 80,024-cell Hazzard2024 inclusion population.
+assert_cell_count(ncol(pv.combined.all), 80024L, label = "hazzard2024.rds")
+assert_unique_cell_ids(colnames(pv.combined.all), label = "hazzard2024.rds colnames")
+assert_no_literal_na_string(pv.combined.all$library_id, label = "hazzard2024$library_id")
+assert_no_literal_na_string(pv.combined.all$day_post_infection, label = "hazzard2024$day_post_infection")
+
 # Save the final object
 saveRDS(pv.combined.all, file = "hazzard2024.rds")
+record_build_manifest(
+  artifact_path = "hazzard2024.rds",
+  script_path = "scripts/hazzard2024_merge_all.R",
+  cell_count = ncol(pv.combined.all),
+  notes = "Fixes D026-D030,D032,D033,D069 (keyed run table); preserves exact 80,024-cell population per Phase 1 conservative membership policy"
+)
 
 # Cleanup
 rm(list = ls())

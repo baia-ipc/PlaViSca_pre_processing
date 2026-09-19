@@ -13,7 +13,28 @@ library(scater)
 library(SingleCellExperiment)
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
 ##### 2. Load annotation files
@@ -180,40 +201,58 @@ for (i in 1:length(all_pv)) {
 # After transforming the data, check out the dimensions of the new Seurat object.
 # How has the noumber of cells and the number of features changed?
 
-# Add metadata. Note: the same will need to be done for the other samples that we analyze.
-study_pmid <- rep(study_num, length(all_pv))
-run_id <- rep(paste0("ERR5087", 438:440), length(all_pv))
-study_label <- rep("Ruberto2022_2", length(all_pv))
-num_srr <- rep(3, length(all_pv))
+# Add metadata via explicit per-run vectors, each keyed 1:1 to the three
+# ERR runs/isolates - fixes D040-D043,D069.
+run_id <- paste0("ERR5087", 438:440)
+assert_cardinality(run_id, length(all_pv), label = "run_id")
+study_label <- rep(STUDY_LABELS[["ruberto2022_2"]], length(all_pv))
 pub_year <- rep(2022, length(all_pv))
-geographic_location <- rep("Cambodia", length(all_pv))
-sc_technology <- rep("10x_Chomium_V3", length(all_pv))
-sequencer <- rep("HiSeq X Ten", length(all_pv))
+# D040: parasite origin / experimental site / sequencing site kept separate,
+# never a single combined "Cambodia" field.
+parasite_origin_location <- rep("Cambodia_Mondulkiri Province", length(all_pv))
+experimental_site <- rep("Institut Pasteur du Cambodge (Phnom Penh)", length(all_pv))
+sequencing_site <- rep("Macrogen (Seoul)", length(all_pv))
+# D041,D069: corrected spelling; V3 chemistry IS independently verified for
+# this study, so it is retained (unlike the other studies' unqualified
+# "10x_Chromium").
+sc_technology <- rep("10x_Chromium_V3", length(all_pv))
+sequencer_registered <- rep("HiSeq X Ten", length(all_pv))
 host_species <- rep("Anopheles dirus", length(all_pv))
-host_id <- rep("tax_id-7168", length(all_pv))
+# D043: proper integer NCBI taxid field, not an ad hoc "tax_id-7168" string
+# (the value itself, Anopheles dirus 7168, was already correct).
+host_taxid <- rep(7168L, length(all_pv))
 sample_type <- rep("Vector host: salivary gland", length(all_pv))
-strain <- rep("Cambodia field isolate", length(all_pv))
+tissue_or_sample_type <- rep("Vector salivary gland", length(all_pv))
+# D042: strain/field-isolate terminology separated from geography.
+strain <- rep("Field isolate", length(all_pv))
 day_post_infection <- c(16, 18, 17)
-treatment <- rep("No_Treatment", length(all_pv))
-biological_replicate <- c(1, 2, 3)
-
+biological_replicate_id <- c("1", "2", "3")
+biological_replicate_type <- rep("infection", length(all_pv))
 
 for (i in 1:length(all_pv)) {
-  all_pv[[i]]$study_pmid <- paste0(study_pmid[[i]])
-  all_pv[[i]]$run_id <- paste0(run_id[[i]])
-  all_pv[[i]]$study_label <- paste0(study_label[[i]])
-  all_pv[[i]]$num_srr <- paste0(num_srr[[i]])
-  all_pv[[i]]$pub_year <- paste0(pub_year[[i]])
-  all_pv[[i]]$geographic_location <- paste0(geographic_location[[i]])
-  all_pv[[i]]$sc_technology <- paste0(sc_technology[[i]])
-  all_pv[[i]]$sequencer <- paste0(sequencer[[i]])
-  all_pv[[i]]$host_species <- paste0(host_species[[i]])
-  all_pv[[i]]$host_id <- paste0(host_id[[i]])
-  all_pv[[i]]$sample_type <- paste0(sample_type[[i]])
-  all_pv[[i]]$strain <- paste0(strain[[i]])
-  all_pv[[i]]$day_post_infection <- paste0(day_post_infection[[i]])
-  all_pv[[i]]$treatment <- paste0(treatment[[i]])
-  all_pv[[i]]$biological_replicate <- paste0(biological_replicate[[i]])
+  n_cells <- ncol(all_pv[[i]])
+  assert_cardinality(colnames(all_pv[[i]]), n_cells, label = paste0("colnames(", run_id[[i]], ")"))
+
+  all_pv[[i]]$study_pmid <- rep(study_num, n_cells)
+  all_pv[[i]]$run_id <- rep(run_id[[i]], n_cells)
+  all_pv[[i]]$study_label <- rep(study_label[[i]], n_cells)
+  all_pv[[i]]$pub_year <- rep(pub_year[[i]], n_cells)
+  all_pv[[i]]$parasite_origin_location <- rep(parasite_origin_location[[i]], n_cells)
+  all_pv[[i]]$experimental_site <- rep(experimental_site[[i]], n_cells)
+  all_pv[[i]]$sequencing_site <- rep(sequencing_site[[i]], n_cells)
+  all_pv[[i]]$sc_technology <- rep(sc_technology[[i]], n_cells)
+  all_pv[[i]]$sequencer_registered <- rep(sequencer_registered[[i]], n_cells)
+  all_pv[[i]]$host_species <- rep(host_species[[i]], n_cells)
+  all_pv[[i]]$host_taxid <- rep(host_taxid[[i]], n_cells)
+  all_pv[[i]]$host_id <- rep(paste0("tax_id-", host_taxid[[i]]), n_cells) # retained for backward compatibility with existing app schema
+  all_pv[[i]]$sample_type <- rep(sample_type[[i]], n_cells)
+  all_pv[[i]]$tissue_or_sample_type <- rep(tissue_or_sample_type[[i]], n_cells)
+  all_pv[[i]]$strain <- rep(strain[[i]], n_cells)
+  all_pv[[i]]$parasite_lineage_isolate <- rep(strain[[i]], n_cells)
+  all_pv[[i]]$day_post_infection <- rep(day_post_infection[[i]], n_cells)
+  all_pv[[i]]$treatment <- rep("No_Treatment", n_cells)
+  all_pv[[i]]$biological_replicate_id <- rep(biological_replicate_id[[i]], n_cells)
+  all_pv[[i]]$biological_replicate_type <- rep(biological_replicate_type[[i]], n_cells)
 
   all_pv[[i]]$barcode <- paste(
     str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
@@ -296,8 +335,26 @@ cells_to_subset <- data.frame(cells = spz_cell_ids) |>
 
 pv.combined.all <- subset(pv.combined.all, cells = cells_to_subset$cells)
 
+# Source-selection-defined Sporozoite provenance (D044,D045,D046): every
+# cell in this study was selected because the source object's own Stage ==
+# "Sporozoite" - this is authoritative and must never be silently overridden
+# downstream by an incompatible blood-stage classifier (see singleR.R).
+pv.combined.all$source_life_cycle_stage <- "Sporozoite"
+pv.combined.all$source_stage_provenance <- "source_selection_defined"
+
+# Conservative Phase 1 membership policy: preserve the exact 9,947-cell
+# population; do not modify counts or membership.
+assert_cell_count(ncol(pv.combined.all), 9947L, label = "ruberto2022_2.rds")
+assert_unique_cell_ids(colnames(pv.combined.all), label = "ruberto2022_2.rds colnames")
+
 # Save Seurat object
 saveRDS(pv.combined.all, file = "ruberto2022_2.rds")
+record_build_manifest(
+  artifact_path = "ruberto2022_2.rds",
+  script_path = "scripts/ruberto2022_2_pv_analysis_script.R",
+  cell_count = ncol(pv.combined.all),
+  notes = "Fixes D040-D043,D069; D044/D045/D046 HPI-gating and override-scoping fixes live in singleR.R"
+)
 # Remove all object
 rm(list = ls())
 gc()

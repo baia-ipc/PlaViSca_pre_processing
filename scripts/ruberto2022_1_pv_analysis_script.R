@@ -13,7 +13,28 @@ library(scater)
 library(SingleCellExperiment)
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
 ##### 2. Load annotation files
@@ -183,39 +204,57 @@ for (i in 1:length(all_pv)) {
 # After transforming the data, check out the dimensions of the new Seurat object.
 # How has the noumber of cells and the number of features changed?
 
-# Add metadata. Note: the same will need to be done for the other samples that we analyze.
-study_pmid <- rep(study_num, length(all_pv))
+# Add metadata via explicit per-run vectors, each keyed 1:1 to the four
+# source libraries/runs (SRR19573609-612), biological replicates and
+# treatment arms - fixes D038,D039,D069.
 run_id <- paste0("SRR19573", 609:612)
-study_label <- rep("Ruberto2022_1", length(all_pv))
-num_srr <- rep(4, length(all_pv))
+assert_cardinality(run_id, length(all_pv), label = "run_id")
+study_label <- rep(STUDY_LABELS[["ruberto2022_1"]], length(all_pv))
 pub_year <- rep(2022, length(all_pv))
-geographic_location <- rep("Cambodia_Mondulkiri", length(all_pv))
-sc_technology <- rep("10x_Chomium_V3", length(all_pv))
-sequencer <- rep("HiSeq X Ten", length(all_pv))
+parasite_origin_location <- rep("Cambodia_Mondulkiri", length(all_pv))
+# D038,D069: corrected spelling; V3 chemistry not independently confirmed
+# for this study, so left unqualified.
+sc_technology <- rep("10x_Chromium", length(all_pv))
+sequencer_registered <- rep("HiSeq X Ten", length(all_pv))
 host_species <- rep("Homo sapiens", length(all_pv))
-host_id <- rep("BioIVT:BGW", length(all_pv))
+host_taxid <- rep(9606L, length(all_pv))
+donor_id <- rep("BioIVT:BGW", length(all_pv))
 sample_type <- rep("Mammalian host: hepatocyte", length(all_pv))
+tissue_or_sample_type <- rep("Host liver", length(all_pv))
 strain <- rep("Cambodia field isolate", length(all_pv))
 day_post_infection <- c(9, 5, 9, 5)
+# D039: "No_Treatment" is already the correct current-script value (the
+# deployed "None" string is stale/historical drift, not reproduced here).
+source_treatment <- c("MMV390048", "None", "MMV390048", "None")
 treatment <- c("MMV390048", "No_Treatment", "MMV390048", "No_Treatment")
-biological_replicate <- c(2, 2, 1, 1)
+# Four source libraries = two biological replicates x two treatment arms,
+# explicitly identified (not just implied by run order).
+biological_replicate_id <- c("2", "2", "1", "1")
+biological_replicate_type <- rep("infection", length(all_pv))
 
 for (i in 1:length(all_pv)) {
-  all_pv[[i]]$study_pmid <- paste0(study_pmid[[i]])
-  all_pv[[i]]$run_id <- paste0(run_id[[i]])
-  all_pv[[i]]$study_label <- paste0(study_label[[i]])
-  all_pv[[i]]$num_srr <- paste0(num_srr[[i]])
-  all_pv[[i]]$pub_year <- paste0(pub_year[[i]])
-  all_pv[[i]]$geographic_location <- paste0(geographic_location[[i]])
-  all_pv[[i]]$sc_technology <- paste0(sc_technology[[i]])
-  all_pv[[i]]$sequencer <- paste0(sequencer[[i]])
-  all_pv[[i]]$host_species <- paste0(host_species[[i]])
-  all_pv[[i]]$host_id <- paste0(host_id[[i]])
-  all_pv[[i]]$sample_type <- paste0(sample_type[[i]])
-  all_pv[[i]]$strain <- paste0(strain[[i]])
-  all_pv[[i]]$day_post_infection <- paste0(day_post_infection[[i]])
-  all_pv[[i]]$treatment <- paste0(treatment[[i]])
-  all_pv[[i]]$biological_replicate <- paste0(biological_replicate[[i]])
+  n_cells <- ncol(all_pv[[i]])
+  assert_cardinality(colnames(all_pv[[i]]), n_cells, label = paste0("colnames(", run_id[[i]], ")"))
+
+  all_pv[[i]]$study_pmid <- rep(study_num, n_cells)
+  all_pv[[i]]$run_id <- rep(run_id[[i]], n_cells)
+  all_pv[[i]]$study_label <- rep(study_label[[i]], n_cells)
+  all_pv[[i]]$pub_year <- rep(pub_year[[i]], n_cells)
+  all_pv[[i]]$parasite_origin_location <- rep(parasite_origin_location[[i]], n_cells)
+  all_pv[[i]]$sc_technology <- rep(sc_technology[[i]], n_cells)
+  all_pv[[i]]$sequencer_registered <- rep(sequencer_registered[[i]], n_cells)
+  all_pv[[i]]$host_species <- rep(host_species[[i]], n_cells)
+  all_pv[[i]]$host_taxid <- rep(host_taxid[[i]], n_cells)
+  all_pv[[i]]$donor_id <- rep(donor_id[[i]], n_cells)
+  all_pv[[i]]$host_id <- rep(donor_id[[i]], n_cells) # retained for backward compatibility with existing app schema
+  all_pv[[i]]$sample_type <- rep(sample_type[[i]], n_cells)
+  all_pv[[i]]$tissue_or_sample_type <- rep(tissue_or_sample_type[[i]], n_cells)
+  all_pv[[i]]$strain <- rep(strain[[i]], n_cells)
+  all_pv[[i]]$day_post_infection <- rep(day_post_infection[[i]], n_cells)
+  all_pv[[i]]$source_treatment <- rep(source_treatment[[i]], n_cells)
+  all_pv[[i]]$treatment <- rep(treatment[[i]], n_cells)
+  all_pv[[i]]$biological_replicate_id <- rep(biological_replicate_id[[i]], n_cells)
+  all_pv[[i]]$biological_replicate_type <- rep(biological_replicate_type[[i]], n_cells)
 
   all_pv[[i]]$barcode <- paste(
     str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
@@ -315,11 +354,42 @@ barcode <- data.frame(cells = pv.combined.all$barcode)
 
 LiverForm <- left_join(barcode, cells_to_subset, by = "cells")
 
-# Add liverForm to the metadata
+# Add liverForm to the metadata (source liver-form annotation, preserved
+# verbatim as the authoritative source_life_cycle_stage for this population)
 pv.combined.all@meta.data$liver_form <- LiverForm$liverForm
+pv.combined.all$source_life_cycle_stage <- LiverForm$liverForm
+pv.combined.all$source_stage_provenance <- "source_selection_defined"
+
+# D036 (main Phase 1 production blocker): the 538/1438 biological-replicate-2
+# cells with near-total expression loss (root cause investigated - see
+# audit/ruberto2022_1/D036_blocker_report.md - not resolved in Phase 1) must
+# remain explicitly detectable, never silently excluded. Flag rather than
+# drop, per the Phase 1 conservative membership policy.
+total_umi <- Matrix::colSums(GetAssayData(pv.combined.all, assay = "RNA", layer = "counts"))
+pv.combined.all$total_umi_count <- total_umi
+pv.combined.all$near_empty_expression_flag <- total_umi <= 1
+
+# Conservative Phase 1 membership policy: preserve the exact 1,438-cell
+# population, including all 538 defective replicate-2 cells - do not exclude
+# them merely because their current counts are bad (D036/DEC09).
+assert_cell_count(ncol(pv.combined.all), 1438L, label = "ruberto2022_1.rds")
+assert_unique_cell_ids(colnames(pv.combined.all), label = "ruberto2022_1.rds colnames")
+n_near_empty <- sum(pv.combined.all$near_empty_expression_flag)
+if (n_near_empty != 538L) {
+  warning(sprintf(
+    "near_empty_expression_flag count is %d, expected 538 per D036 audit evidence - re-check total_umi_count threshold before trusting this build",
+    n_near_empty
+  ))
+}
 
 # Save Seurat object
 saveRDS(pv.combined.all, file = "ruberto2022_1.rds")
+record_build_manifest(
+  artifact_path = "ruberto2022_1.rds",
+  script_path = "scripts/ruberto2022_1_pv_analysis_script.R",
+  cell_count = ncol(pv.combined.all),
+  notes = sprintf("Fixes D038,D039,D069; D036 NOT repaired in Phase 1 (see blocker report) - %d cells flagged near_empty_expression_flag, retained per DEC09/conservative membership policy", n_near_empty)
+)
 
 # Remove all object
 rm(list = ls())

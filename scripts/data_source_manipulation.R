@@ -2,26 +2,52 @@ library(readr)
 library(dplyr)
 library(stringr)
 
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 # Publication dates
+# D057: Hazzard2022 (row 4) corrected from "16-Nov-22" to the actual
+# publication date "16-Dec-22".
 Publication_date <- c(
   "4-May-20",
   "4-Aug-22",
   "25-Aug-22",
-  "16-Nov-22",
+  "16-Dec-22",
   "2-Sep-24",
   "19-Apr-22"
 )
 
-# Study labels
+# Study labels: sourced from the single shared STUDY_LABELS constant
+# (scripts/pipeline_lib.R) so this table can never again drift from the
+# per-study scripts/singleR.R/app spelling (fixes D056: "Sar2020" typo and
+# the "Mancio-Silva2022" vs "Mancio Silva2022" mismatch).
 Study_label <- c(
-  "Sar2020",
-  "Ruberto2022_2",
-  "Ruberto2022_1",
-  "Hazzard2022",
-  "Hazzard2024",
-  "Mancio-Silva2022"
+  STUDY_LABELS[["sa2020"]],
+  STUDY_LABELS[["ruberto2022_2"]],
+  STUDY_LABELS[["ruberto2022_1"]],
+  STUDY_LABELS[["hazzard2022"]],
+  STUDY_LABELS[["hazzard2024"]],
+  STUDY_LABELS[["mancio_silva2022"]]
 )
 
 # Authors
@@ -74,20 +100,41 @@ Number_of_cells <- c(
   1494
 )
 
-df <- cbind(
-  Publication_date,
-  Study_label,
-  Authors,
-  Journal,
-  Title,
-  DOI,
-  Number_of_cells
+# D067: keyed, fail-loud construction (never a bare cbind of independently
+# maintained vectors) - all seven vectors must have exactly 6 entries, one
+# per study, in the same order.
+n_studies <- length(STUDY_LABELS)
+for (v in list(Publication_date, Study_label, Authors, Journal, Title, DOI, Number_of_cells)) {
+  assert_cardinality(v, n_studies, label = "data_source_manipulation.R study vector")
+}
+assert_unique_cell_ids(Study_label, label = "data_source.csv Study_label")
+unexpected_labels <- setdiff(Study_label, STUDY_LABELS)
+if (length(unexpected_labels) > 0) {
+  pipeline_fail(paste0(
+    "data_source.csv Study_label value(s) not in the canonical STUDY_LABELS constant: ",
+    paste(unexpected_labels, collapse = ", ")
+  ))
+}
+
+df <- data.frame(
+  Publication_date = Publication_date,
+  Study_label = Study_label,
+  Authors = Authors,
+  Journal = Journal,
+  Title = Title,
+  DOI = DOI,
+  Number_of_cells = Number_of_cells,
+  stringsAsFactors = FALSE
 )
-df <- as.data.frame(df)
 
 # Ensure the folder exists, then write to CSV
 
 write_csv(df, "data/data_source.csv")
+record_build_manifest(
+  artifact_path = "data/data_source.csv",
+  script_path = "scripts/data_source_manipulation.R",
+  notes = "Fixes D056 (Study_label sourced from shared STUDY_LABELS constant),D057 (Hazzard2022 publication date)"
+)
 
 # Print the data frame
 print(df)

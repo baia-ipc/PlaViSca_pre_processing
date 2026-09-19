@@ -1277,3 +1277,501 @@ missing local dated-object identities remain unresolved. No deposited count arch
 was downloaded, and no production object was regenerated. Evidence scripts only
 read production files and write these audit tables/logs; the sole synthetic assay
 was for API resolution, not a scientific reanalysis.
+
+## Full forensic audit: Ruberto et al. 2022 sporozoite study
+
+**Completed 2026-09-19.** Scope is restricted to Ruberto2022_2 (PMID 35926062,
+9,947 salivary-gland sporozoites, runs ERR5087438–440), continuing from and not
+repeating the completed Mancio-Silva2022, Sa2020, Hazzard2024, Hazzard2022 and
+Ruberto2022_1 audits, and not repeating the shared-pipeline findings already
+recorded in the cross-study section above except where a Ruberto2022_2-specific
+check requires it. No production R script, source count matrix, study RDS,
+integrated object, metadata field or application artifact was modified.
+SingleR/Harmony/export were not rerun. All new evidence is under
+`pre_process_data/audit/ruberto2022_2/`: `audit_ruberto2022_2.R` (the single
+deterministic diagnostic script, run through `env -u R_LIBS_USER pixi run
+Rscript --vanilla ../audit/ruberto2022_2/audit_ruberto2022_2.R` from
+`pre_process_data/scripts`), its TSV/text outputs, `SHA256SUMS.txt`, and
+downloaded authoritative snapshots `ena_PRJEB42435_runs.tsv`, `ena_samples.xml`
+and `article.xml` (Europe PMC full text for PMC9380936). As in the Ruberto2022_1
+audit, `rtracklayer`/`GenomeInfoDb` fail to load in this Pixi environment
+(missing `GenomeInfoDbData`); the rRNA feature-ID list required to reproduce
+the production script's filter was instead parsed directly from the same GFF
+file with base-R string splitting on `type == "rRNA"`, matching the production
+filter exactly. This is an environment limitation, not a script-logic change.
+
+### Executive finding
+
+This is the cleanest lineage/expression result of any study audited in this
+project so far: cell inventory, per-run counts and raw/normalized expression
+are all **exactly** reconciled, with zero mismatches, across every boundary
+from the STARsolo raw matrices through the deployed app. The one **confirmed
+defect reaching the deployed artifact** is the same class already documented
+for other studies: **all 9,947 Ruberto2022_2 cells (100%) carry a non-NA
+blood-stage `hour_post_invasion` label** in `cleaned_dataset.rds`, despite
+being exclusively source-defined mosquito-stage sporozoites. A second,
+previously undocumented **latent code-order defect** in `singleR.R` is
+identified: the unconditional gametocyte-cluster override that runs after the
+Ruberto2022_2 Sporozoite override is not scoped to exclude already
+source-defined stages, so it could silently overwrite `parasite_stages` for
+any Ruberto2022_2 cell landing in the female/male gametocyte cluster. It did
+not do so in the deployed data only because no Ruberto2022_2 cell happened to
+receive that cluster label (0/9,947, confirmed below) — an accident of the
+data, not a property of the code.
+
+### 1. Publication and accession metadata — verified field by field
+
+| Field | Registered/verified value | Evidence | Status |
+|---|---|---|---|
+| PMID | 35926062 | Europe PMC search on `EXT_ID:35926062` | CONFIRMED |
+| PMCID | PMC9380936 | Europe PMC | CONFIRMED |
+| DOI | 10.1371/journal.pntd.0010633 | Europe PMC; matches script/table | CONFIRMED |
+| Title/journal/date | "Single-cell RNA sequencing of *Plasmodium vivax* sporozoites reveals stage- and species-specific transcriptomic signatures", PLoS Negl Trop Dis, first published 2022-08-04 | Europe PMC | CONFIRMED |
+| BioProject/ENA study | PRJEB42435 | `ena_PRJEB42435_runs.tsv` | CONFIRMED |
+| Deposited runs | Exactly ERR5087438, ERR5087439, ERR5087440 (no other runs returned for this study accession) | `ena_PRJEB42435_runs.tsv` | CONFIRMED |
+| Run ↔ sample mapping | ERR5087438→Pv1/rep1 (SAMEA7804580), ERR5087439→Pv2/rep2 (SAMEA7804581), ERR5087440→Pv3/rep3 (SAMEA7804582) | ENA file report + sample XML | CONFIRMED |
+| Parasite source/provenance | Patient isolates from individuals presenting to health facilities in **Mondulkiri Province (Kaev Seima), Eastern Cambodia**, Sept–Nov 2019 | `article.xml` Methods/Acknowledgments | CONFIRMED |
+| Mosquito species | *Anopheles dirus* | ENA `host scientific name`/`host common name`; article ("salivary glands of An.dirus mosquitoes") | CONFIRMED |
+| Sample type | Sporozoites dissected from mosquito salivary glands | ENA `isolation source host-associated` = "salivary glands"; article | CONFIRMED (matches `sample_type = "Vector host: salivary gland"`) |
+| Sequencing platform | HiSeq X Ten | ENA `instrument_model`; article ("HiSeq X Ten platform (Illumina)") | CONFIRMED |
+| Sequencing location | **Macrogen (Seoul, Korea)** | article Methods | New evidence — see geography note below |
+| Single-cell technology | 10x Genomics Chromium, **v3** Single Cell 3′ gene expression protocol | article Methods ("v3 Chromium Single Cell 3' gene expression protocol") | CONFIRMED — the chemistry-version claim (`V3`) in `sc_technology` is correct; only the spelling is wrong (see below) |
+| Parasite isolate/strain | ENA `strain`="Field isolate", `genotype`="Pv field isolate"; patient-derived Cambodian field isolates, not a laboratory strain | ENA sample XML | CONFIRMED at the concept level; PlaViSca's `strain = "Cambodia field isolate"` merges geography into the strain field (a terminology-conflation pattern already flagged for other studies), not a factual error |
+| Biological replicates | Three **independent patient-derived isolates** (rep1/rep2/rep3; ENA `isolate`=1/2/3), collected on three different dates from different patients, not technical replicates of one culture | ENA sample XML | APPARENTLY CONSISTENT for `biological_replicate = c(1,2,3)`, but the field should be documented as isolate-level, not technical, replication |
+| Collection/infection day | ENA `dev_stage` = "Day 16"/"Day 18"/"Day 17" for rep1/rep2/rep3 respectively — days post mosquito membrane feed to salivary-gland dissection, **not** patient blood-collection date | ENA sample XML | CONFIRMED exact match to `day_post_infection = c(16,18,17)`; field name should clarify "day post mosquito infection" |
+| Geographic provenance | Three distinct locations conflated into one field (see below) | ENA + article | CONFIRMED DEFECT (concept collapse) |
+| host_species | Anopheles dirus | ENA | CONFIRMED |
+| host_id | `tax_id-7168` | NCBI Taxonomy `efetch` on taxid 7168 returns `Anopheles dirus`; the literal string is copied verbatim from ENA's own non-standard `host subject id` sample attribute (value `tax_id-7168`) | APPARENTLY CONSISTENT (the number is correct) but the ad hoc `"tax_id-NNNN"` string format is not a standard taxonomy field and should be redesigned as an integer NCBI taxid, sourced independently rather than copied from a free-text ENA attribute |
+
+**CONFIRMED DEFECT, terminology:** `sc_technology = "10x_Chomium_V3"` misspells
+"Chromium." Unlike the Sa2020/Mancio-Silva technology fields, the **version**
+claim here (`V3`) is independently verified correct against the publication's
+Methods text — this is a pure spelling defect, not an unsupported chemistry
+claim.
+
+**CONFIRMED DEFECT, geographic concept collapse:** ENA's registered sample
+coordinates (11.5564°N, 104.9282°E) are Institut Pasteur du Cambodge's Phnom
+Penh location, not the parasite's actual collection site. Three genuinely
+distinct concepts exist and are not distinguished by the single
+`geographic_location = "Cambodia"` field: (1) **parasite/patient geographic
+origin** — Mondulkiri Province (Kaev Seima), Eastern Cambodia; (2)
+**experimental/library-preparation location** — Institut Pasteur du Cambodge,
+Phnom Penh (the ENA-registered sample coordinates); (3) **sequencing
+location** — Macrogen, Seoul, South Korea. The country-level value "Cambodia"
+is not factually wrong for the parasite's origin, but the field collapses all
+three concepts and entirely omits that sequencing took place in South Korea,
+continuing the same conflation pattern already confirmed for Mancio-Silva2022,
+Sa2020 and Hazzard2022.
+
+### 2. Source-object provenance: `data/6_PvSPZ.BS.combined.rds`
+
+**SOURCE/PROVENANCE ISSUE, resolved to "locally processed derivative," not
+"apparently author-provided":** this object is unambiguously a **local
+integration product**, not a minimally modified author download. Evidence
+(`source_object_provenance_summary.txt`, `source_object_assay_summary.tsv`,
+`source_object_metadata_fields.tsv`):
+
+- Seurat object version 4.1.0, four assays (`originalexp` 4,254 features,
+  `CCA` 656, `RNA` 4,170, `integrated` 658, default assay), with a command
+  history of `FindIntegrationAnchors`, `ScaleData.integrated`,
+  `RunPCA.integrated`, `RunUMAP.integrated.pca`, `FindNeighbors.integrated.pca`
+  — this is Seurat's standard CCA-integration workflow output, run locally.
+- 55 metadata fields include `scDblFinder.*` doublet-detection columns,
+  scater QC columns (`sum`, `detected`, `subsets_uis_*`, `sizeFactor`,
+  `librarySizeFactors`), and ten `CCA_snn_res.*` clustering resolutions —
+  extensive local computational processing, not raw author metadata.
+- The filename itself (`6_PvSPZ.BS.combined.rds`, step "6" of a numbered local
+  pipeline) and the object's two-part composition — 9,947 `Stage=="Sporozoite"`
+  cells plus 8,304 `Stage=="BloodStage"` cells from an unrelated blood-stage
+  dataset — describe a local combination of the Ruberto2022_2 sporozoite data
+  with a separate blood-stage study, consistent with "PvSPZ" + "BS" +
+  "combined" in the filename.
+- `orig.ident` is `"SeuratProject"` (Seurat's unlabeled default) for all 9,947
+  Sporozoite cells and `NA` for all 8,304 BloodStage cells — independent
+  evidence that the Sporozoite portion was built as a separate, never
+  explicitly labeled Seurat object before being merged with the (differently
+  constructed) BloodStage portion.
+- `Sample` for the Sporozoite cells takes exactly the three values
+  `Case_909`/`Case_922`/`Case_923` (3,375/4,002/2,570 cells); BloodStage cells
+  instead carry small numeric sample codes (69,71,72,73,75,76,78). This
+  confirms the Sporozoite portion is organized by patient/isolate case, as
+  expected for Ruberto2022_2's three-isolate design.
+
+Given this clear local-integration signature, whether `Stage == "Sporozoite"`
+is itself a verbatim author-supplied field or a label assigned locally during
+the BS+SPZ combination step **cannot be established from the object's
+metadata alone** — no build script or manifest for this object is present in
+the repository. This is recorded as **NOT RESOLVED**, refining rather than
+contradicting the preliminary "chain of custody... unresolved" flag: the
+audit now knows the object is a local derivative, but not the exact origin of
+the `Stage` label within it.
+
+- **Total cells before the Stage filter:** 18,251.
+- **Sporozoite cells:** 9,947. **BloodStage cells:** 8,304. No missing Stage
+  values (`source_stage_counts.tsv`).
+- **Source sample names and counts** (Sporozoite only): Case_909=3,375,
+  Case_922=4,002, Case_923=2,570 (`source_sample_stage_counts.tsv`) — an exact
+  match to the script's `Case_909→438/Case_922→439/Case_923→440` mapping and
+  to every downstream per-run count.
+
+### 3. Source-to-PlaViSca cell lineage
+
+`lineage_table.tsv` (9,947 rows) reconstructs the production script's exact
+transformation — `cells_name`/`cells_num` split, `Case_9XX → run suffix`,
+`new_cells_name = paste0(run_suffix, "_", barcode)` — directly from the actual
+source object, then checks membership against `ruberto2022_2.rds` and the
+deployed `cleaned_dataset.rds` (`lineage_summary.txt`):
+
+| Check | Result |
+|---|---:|
+| Unique source Sporozoite cell IDs | 9,947 |
+| Unique final PlaViSca IDs after transformation | 9,947 |
+| Matched (present in study RDS and deployed data) | 9,947 |
+| Missing from study RDS | 0 |
+| Missing from deployed data | 0 |
+| Unmapped source samples | 0 |
+| Duplicate final-ID mappings | 0 |
+| Extra cells in `ruberto2022_2.rds` not in the source lineage | 0 |
+| Extra cells in deployed data not in the source lineage | 0 |
+| `ruberto2022_2.rds` cell-ID set == deployed cell-ID set | TRUE |
+
+**CONFIRMED** (not merely repeated): 9,947 unique mappings, zero missing, zero
+excess, zero duplicate/one-to-many/many-to-one mappings, at every boundary.
+
+### 4. Per-run cell counts
+
+`per_run_cell_counts.tsv` — identical at all four boundaries (source
+Stage-filtered object, STARsolo raw-whitelist membership, `ruberto2022_2.rds`,
+deployed `cleaned_dataset.rds`):
+
+| Run | Source | STARsolo matched | Study RDS | Deployed |
+|---|---:|---:|---:|---:|
+| ERR5087438 | 3,375 | 3,375 | 3,375 | 3,375 |
+| ERR5087439 | 4,002 | 4,002 | 4,002 | 4,002 |
+| ERR5087440 | 2,570 | 2,570 | 2,570 | 2,570 |
+
+**CONFIRMED**: zero divergence at any boundary, for every run individually.
+
+### 5. Cell-selection logic
+
+`ruberto2022_2_pv_analysis_script.R` reads STARsolo `GeneFull/raw` (confirmed
+the full 10x v3 barcode whitelist: 6,794,880 barcodes per run from
+`barcodes.tsv` line counts), builds `CreateSeuratObject(..., min.cells = 0,
+min.features = 0)` with no independent filtering, and its only commented-out
+QC step is `emptyDrops`. `starsolo_raw_membership.tsv` confirms all 9,947
+selected source barcodes exist in their respective run's raw whitelist matrix
+(0 missing in all three runs), and `subset(pv.combined.all, cells =
+cells_to_subset$cells)` excludes everything else by construction.
+
+**APPARENTLY CONSISTENT:** no explicit empty-droplet/QC filtering is active;
+the final inclusion criterion for Ruberto2022_2 is effectively 100% the
+source/author `Stage == "Sporozoite"` list; every source-selected barcode
+exists in the reconstructed STARsolo matrix; no reconstructed cell outside the
+source list survives; cells excluded from the source list have no role in
+PlaViSca.
+
+### 6. Raw-expression and normalized-expression preservation
+
+Reconstructed from the raw STARsolo `GeneFull/raw` matrices (full whitelist
+subset to the 9,947 selected barcodes, rRNA-removed using the same GFF filter
+as production):
+
+| Comparison | Cells | Genes | Values | Mismatches | Max abs diff |
+|---|---:|---:|---:|---:|---:|
+| STARsolo reconstruction vs `ruberto2022_2.rds` | 9,947 | 6,811 | 67,749,017 | **0** | **0** |
+| `ruberto2022_2.rds` vs deployed `raw_df.rds` | 9,947 | 6,811 | 67,749,017 | **0** | **0** |
+| Deployed `normalize_df.rds` vs `log1p(count / cell_total * 10000)` | 9,947 | 6,860 | 68,236,420 | **0** (tol. 1e-8) | **0** |
+
+(`expression_concordance_starsolo_vs_studyrds.txt`,
+`expression_concordance_studyrds_vs_deployed_raw.txt`,
+`normalization_formula_check.txt`.) `raw_df.rds` carries 49 additional
+parasite-gene columns beyond the 6,811 shared with `ruberto2022_2.rds`
+(contributed by other studies' gene panels); independently confirmed all-zero
+for every Ruberto2022_2 cell.
+
+**CONFIRMED, exact:** the full chain STARsolo → study RDS → deployed raw →
+deployed normalized is numerically identical at every step — the cleanest
+expression-preservation result obtained for any study in this project.
+
+**Scope limitation, stated explicitly rather than overstated:** the source
+combined object (`6_PvSPZ.BS.combined.rds`) itself contains only a reduced,
+locally processed 4,170–4,254-feature RNA/`originalexp` assay (Section 2), not
+the full 6,811-gene STARsolo panel. Comparing STARsolo raw counts directly
+against that source object's own count layers is **not meaningful**, because
+the two matrices represent different processing stages and feature sets, not
+a raw-vs-final pair. This audit therefore establishes full **STARsolo-to-
+PlaViSca concordance**; **source-object processed-expression concordance is
+NOT RESOLVED** (out of scope given the feature-set mismatch), consistent with
+the instruction not to overstate evidence.
+
+### 7. Duplicate-profile forensics
+
+SHA-256 sparse hashing (nonzero gene index + value) of the raw-count profile
+of all 9,947 retained cells (`duplicate_profile_summary.txt`,
+`duplicate_profile_groups.tsv`):
+
+- Exact-duplicate raw-expression profile groups: **0** (within-run: 0;
+  cross-run: 0).
+- Bare barcode tokens (ignoring run prefix) reused across two of the three
+  runs: **12** (`reused_barcode_tokens_across_runs.tsv`) — expected under a
+  shared 10x barcode whitelist used by three independent captures; because
+  every final PlaViSca ID is run-scoped (`<run-suffix>_<barcode>`), these
+  reused tokens never collide as final IDs, matching the same pattern already
+  documented for Sa2020.
+
+**Classification: no duplicate issue.** No within-run exact duplicates, no
+cross-run exact duplicates, no reused-barcode collisions at the final-ID
+level, and no duplicated final records.
+
+### 8. Stage-annotation provenance
+
+`singleR.R` unconditionally sets `pv.combined.all$parasite_stages[study_label
+== "Ruberto2022_2"] <- "Sporozoite"` (lines 142–143), after the Zhu blood-stage
+SingleR IDC prediction and the liver/refine_state overrides, but **before**
+the later unconditional gametocyte-cluster override at lines 329–331
+(`pv.combined.all$parasite_stages[male_female] <- pv.combined.all$pred_gametocyte[male_female]`),
+which is **not scoped to exclude cells whose stage is already
+source-selection-defined**. In principle this later code could silently
+overwrite the Ruberto2022_2 "Sporozoite" label for any cell whose de novo
+cluster happened to be labeled "Female gametocyte"/"Male gametocyte."
+
+Empirically, in the deployed data, `pred_gametocyte` for Ruberto2022_2 cells
+is Asexual 1 (9,944), Asexual 2 (1), Asexual 7 (2) — **zero** Female/Male
+gametocyte cluster labels
+(`deployed_pred_gametocyte_distribution.tsv`). So this latent risk did not
+materialize: it is an accident of the clustering result on this deployed
+build, not a property of the code that guarantees safety on any future run.
+
+**Conclusion, CONFIRMED (validating the preliminary finding with this added
+nuance):** the final `parasite_stages`/`life_cycle_stage = "Sporozoite"` label
+for all 9,947 Ruberto2022_2 cells is **source-selection-defined** — a faithful
+propagation of the source object's `Stage == "Sporozoite"` cell-selection
+criterion used to build the cohort — not an independent SingleR/clustering
+prediction. **STRONG SUSPICION / REQUIRES VALIDATION for the repair design:**
+the later gametocyte-cluster override should be explicitly scoped to exclude
+cells with a source-selection-defined stage (e.g., any mosquito-derived
+sporozoite population), rather than relying on the empirical absence of
+gametocyte-cluster hits for this particular build.
+
+The Sa2020-specific gametocyte reassignment block (matching
+`pv.combined.all$barcode` against Sa-only prefixes 269–278) cannot match any
+Ruberto2022_2 barcode (`438_`/`439_`/`440_` prefixes), and the liver/blood
+schizont-relabeling block only fires on `sample_type` values Ruberto2022_2
+never has ("Mammalian host: hepatocyte"/"blood" vs. its actual "Vector host:
+salivary gland") — both confirmed non-interfering for this study.
+
+### 9. HPI / blood-stage annotation contamination
+
+**CONFIRMED DEFECT, quantified exactly:** all 9,947 Ruberto2022_2 cells
+(100%) carry a non-NA `hour_post_invasion` value in the deployed
+`cleaned_dataset.rds` (`deployed_hpi_distribution.tsv`,
+`hpi_stage_gametocyte_summary.txt`):
+
+| hour_post_invasion | n cells |
+|---:|---:|
+| 6 | 437 |
+| 12 | 98 |
+| 24 | 191 |
+| 32 | 215 |
+| 36 | 3,886 |
+| 42 | 1,730 |
+| 48 | 3,390 |
+| **Total** | **9,947** |
+
+This is the Zhu SMRU1 blood-stage IDC reference-similarity label, assigned to
+cells that are exclusively source-defined mosquito-stage sporozoites and never
+underwent blood-stage asexual replication — inappropriate derived annotation
+by the task's own standard, even though the final detailed stage is correctly
+overwritten to Sporozoite. This exactly corroborates and quantifies (9,947 of
+9,947, i.e. 100%) the cross-study preliminary finding for this study.
+
+The current script's own masking logic
+(`pv.combined.all$hour_post_invasion[pv.combined.all$sample_type !=
+"Mammalian host: blood"] <- NA`) would, if it had executed against the current
+`sample_type = "Vector host: salivary gland"` value, correctly null out HPI
+for every Ruberto2022_2 cell. That it did not is additional
+Ruberto2022_2-specific evidence — beyond the Mancio-Silva finding already on
+record — that the deployed artifact does not reflect an execution of the
+currently checked-out `singleR.R` (see Section 12).
+
+No Ring/Trophozoite/Schizont/Merozoite *categorical* label survives in the
+deployed `parasite_stage`/`life_cycle_stage` fields for Ruberto2022_2 — both
+are 100% "Sporozoite stage"/"Sporozoite" — so the forced override correctly
+masks the discrete IDC label; the contamination is confined to the numeric
+`hour_post_invasion` field, exactly matching the pattern already established
+for Mancio-Silva2022 ("all 105,963 final cells have a nonmissing HPI label").
+`development_phase` is not applicable/moot here because that field does not
+exist at all in the deployed schema (Section 11).
+
+### 10. Gametocyte effects and post-integration cell removal
+
+**CONFIRMED: none removed.** `ruberto2022_2.rds` (9,947 cells) and the
+deployed `cleaned_dataset.rds` Ruberto2022_2 rows (9,947) are identical in
+count, for every one of the three runs individually
+(`hpi_stage_gametocyte_summary.txt`: `n_cells_lost_between_study_rds_and_deployed:
+0`; Section 4 per-run table). No Ruberto2022_2 cell was ever cluster-classified
+as "Male gametocyte"/"Female gametocyte" (`pred_gametocyte` = Asexual 1/2/7
+only, zero gametocyte labels, Section 8), so the mosquito-host gametocyte
+subset-removal step in `singleR.R`
+(`!((parasite_stages %in% c("Male gametocyte","Female gametocyte")) &
+grepl("Anopheles", host_species))`) had nothing to remove from this study.
+This corroborates and quantifies the cross-study table's prior "0/0" cluster
+female/male entry for Ruberto2022_2.
+
+### 11. Broad lifecycle terminology
+
+Deployed values for all 9,947 Ruberto2022_2 cells: `parasite_stage` =
+"Sporozoite stage" (9,947/9,947), `life_cycle_stage` = "Sporozoite"
+(9,947/9,947), `liver_form` = NA (9,947/9,947), `refine_state` = NA
+(9,947/9,947), `pred_gametocyte` = Asexual only (Section 8). Internally
+consistent, no contradictory blood/liver labels anywhere in the categorical
+fields (unlike Hazzard2022's confirmed broad/detailed contradiction).
+
+**CONFIRMED, schema divergence:** `development_phase` and `blood_stage`
+— the task's expected fields — **do not exist at all** in the deployed
+`cleaned_dataset.rds` (its full 52-column `mr_data` schema was enumerated;
+neither column is present). This 3-tier terminology exists only in the
+currently checked-out `singleR.R`, confirming for Ruberto2022_2 (as already
+established for Mancio-Silva2022) that the deployed artifact predates this
+schema change and was not produced by the current script.
+
+**New, previously undocumented terminology drift:** deployed
+`parasite_stage` = "Sporozoite stage" versus the current script's
+`parasite_stages` = "Sporozoite" (no "stage" suffix) — a small vocabulary
+difference between the historical/deployed build and current code, distinct
+in detail from (but consistent in kind with) the already-documented
+`parasite_stage`/`parasite_stages` field-name and vocabulary divergence.
+
+### 12. Historical/deployed lineage
+
+Three independent lines of Ruberto2022_2-specific evidence converge on the
+same conclusion already reached for Mancio-Silva2022 — that the deployed
+`cleaned_dataset.rds` was **not** produced by an execution of the currently
+checked-out `singleR.R`/`flatten_data.R`:
+
+1. HPI leakage (Section 9) despite current masking logic that should prevent
+   it for this study's `sample_type`.
+2. Complete absence of `development_phase`/`blood_stage` columns (Section 11).
+3. "Sporozoite stage" (deployed) vs. "Sporozoite" (current script) wording
+   drift (Section 11).
+
+**By contrast**, the expression-generation chain (Section 6: STARsolo → study
+RDS → `raw_df.rds` → `normalize_df.rds`) is exactly consistent with what the
+current `ruberto2022_2_pv_analysis_script.R` and `flatten_data.R` would
+produce. **The divergence is therefore confined to the SingleR/stage/HPI/
+terminology export layer (`singleR.R` onward), not to the count-generation
+layer** — an important distinction for the repair design below.
+
+No specific historical commit is identified for Ruberto2022_2's stage/HPI
+construction in this pass; that would require a further historical-script
+archaeology exercise analogous to the Mancio `inspect_historical_lineage.R`,
+which is scoped out here per the instruction to restrict this investigation
+primarily to Ruberto2022_2 and avoid repeating completed shared-pipeline work.
+**NOT RESOLVED:** the exact historical build. **CONFIRMED:** the fact and
+direction of current-code/deployed-data divergence.
+
+### 13. Classification summary
+
+| # | Area | Classification |
+|---|---|---|
+| 1 | PMID/DOI/accession identity, run↔sample mapping, mosquito species, sample type, platform, chemistry version, patient-isolate provenance | CONFIRMED (verified) |
+| 1 | `sc_technology` spelling ("Chomium") | CONFIRMED DEFECT (typo only) |
+| 1 | `geographic_location` concept collapse (parasite origin vs. lab location vs. sequencing location) | CONFIRMED DEFECT |
+| 1 | `strain` geography/strain conflation | STRONG SUSPICION (terminology, not factual error) |
+| 1 | `host_id = tax_id-7168` | APPARENTLY CONSISTENT (number verified correct; format is an ad hoc ENA-attribute copy) |
+| 2 | Source object (`6_PvSPZ.BS.combined.rds`) is a local BS+SPZ integration derivative, not raw author data | CONFIRMED |
+| 2 | Exact origin of `Stage` label within that derivative | NOT RESOLVED |
+| 3 | Source-to-PlaViSca cell lineage: 9,947 unique, zero missing/excess/duplicate | CONFIRMED |
+| 4 | Per-run counts identical at all four boundaries | CONFIRMED |
+| 5 | Cell-selection logic: 100% source-list-defined, no independent QC | APPARENTLY CONSISTENT |
+| 6 | STARsolo → study RDS → deployed raw/normalized expression | CONFIRMED (exact, zero mismatches) |
+| 6 | Source-object processed-expression concordance | NOT RESOLVED (feature-set mismatch; out of scope) |
+| 7 | Duplicate-profile forensics | APPARENTLY CONSISTENT (no duplicate issue) |
+| 8 | Final Sporozoite stage label is source-selection-defined | CONFIRMED |
+| 8 | Gametocyte-override code order/scoping | STRONG SUSPICION / REQUIRES VALIDATION (latent, not exercised in this build) |
+| 9 | HPI contamination on source-defined sporozoites | CONFIRMED DEFECT (9,947/9,947, 100%) |
+| 10 | Post-integration gametocyte removal | CONFIRMED: none removed |
+| 11 | development_phase/blood_stage absent from deployed schema | CONFIRMED (schema divergence) |
+| 11 | "Sporozoite stage" vs. "Sporozoite" wording drift | CONFIRMED (new finding) |
+| 12 | Deployed data does not reflect current script execution (stage/HPI/export layer only) | CONFIRMED |
+
+### 14. Proposed repair policy (not applied)
+
+1. **Metadata corrections:** fix `10x_Chomium_V3` → `10x_Chromium_V3` (spelling
+   only; the V3 claim itself is retained as verified). Replace the single
+   `geographic_location` field with three explicit, separately labeled
+   concepts: `parasite_origin_location` (Mondulkiri Province, Cambodia),
+   `experimental_location` (Institut Pasteur du Cambodge, Phnom Penh), and
+   `sequencing_location` (Macrogen, Seoul, South Korea). Keep `strain` and
+   geography separate (`strain = "Field isolate"` plus a separate provenance
+   note), and record `biological_replicate` explicitly as isolate-level, not
+   technical, replication. Replace the ad hoc `host_id = "tax_id-7168"` string
+   with a standard integer NCBI taxid field, independently sourced rather than
+   copied from ENA's free-text `host subject id` attribute (the number itself
+   is correct and can be retained).
+2. **Source-vs-derived annotation provenance:** explicitly label
+   `parasite_stages = "Sporozoite"` for Ruberto2022_2 as
+   `stage_provenance = "source_selection_defined"` (not a PlaViSca/SingleR
+   prediction), and scope the later gametocyte-cluster override in `singleR.R`
+   to skip any cell already carrying a source-selection-defined stage, closing
+   the latent risk identified in Section 8 regardless of future clustering
+   results.
+3. **HPI removal/correction:** null `hour_post_invasion` (and any HPI-derived
+   field) for all Ruberto2022_2 cells, consistent with the existing masking
+   intent in `singleR.R` that the deployed build does not currently reflect.
+   This affects only a metadata column, not counts or embeddings.
+4. **Lifecycle terminology:** decide and apply one vocabulary
+   ("Sporozoite" vs. "Sporozoite stage") consistently across script and
+   export; if the 3-tier `development_phase`/`blood_stage` schema is adopted,
+   regenerate the export so deployed data actually reflects it (currently
+   absent).
+5. **Cell-inclusion changes:** none proposed. Section 3–5 findings are exact
+   and clean; no cell should be added, removed or reclassified in inclusion
+   terms.
+6. **Expression changes:** none proposed. Section 6 findings show exact,
+   zero-mismatch preservation from STARsolo through deployed
+   raw/normalized data.
+
+**Regeneration dependencies:** items 1 and 2–4 are metadata/annotation-only
+and do not require regenerating `ruberto2022_2.rds`, Harmony/PCA/UMAP/t-SNE,
+or the count layers of `normalize_df.rds`/`raw_df.rds`/`scale_df.rds` — those
+are already exactly reconciled (Section 6) and cell inclusion is unchanged
+(Section 3–5, 10). They do require regenerating the metadata columns of
+`pv_all_studies.rds` (if/when reconstructed), `cleaned_dataset.rds`
+(`mr_data`), and the metadata columns of `normalize_df.rds`/`raw_df.rds`/
+`scale_df.rds`, since those currently carry the stale HPI/terminology values
+identified above. No expression or embedding regeneration is required by any
+proposed change in this section.
+
+### Evidence manifest addition
+
+All files are under `pre_process_data/audit/ruberto2022_2/`; checksums in
+`pre_process_data/audit/ruberto2022_2/SHA256SUMS.txt`.
+
+| File | Purpose | Size |
+|---|---|---:|
+| `audit_ruberto2022_2.R` | Single deterministic audit script (Sections A–H) | ~19 KB |
+| `source_object_provenance_summary.txt` | Source-object class/version/assay/command summary | 293 B |
+| `source_object_assay_summary.tsv` | Per-assay feature counts and count-layer ranges | 172 B |
+| `source_object_metadata_fields.tsv` | Full 55-field source metadata schema | 819 B |
+| `source_stage_counts.tsv` | Stage field counts (BloodStage/Sporozoite) | 51 B |
+| `source_sample_stage_counts.tsv` | Sample × Stage cross-tabulation | 542 B |
+| `lineage_table.tsv` | Full 9,947-row source-to-final lineage reconstruction | 1,263,426 B |
+| `lineage_summary.txt` | Lineage reconciliation counts | 436 B |
+| `per_run_cell_counts.tsv` | Per-run counts at all four boundaries | 150 B |
+| `starsolo_raw_membership.tsv` | STARsolo raw-whitelist membership per run | 135 B |
+| `expression_concordance_starsolo_vs_studyrds.txt` | Raw-count concordance, STARsolo vs. study RDS | 287 B |
+| `expression_concordance_studyrds_vs_deployed_raw.txt` | Raw-count concordance, study RDS vs. deployed | 232 B |
+| `normalization_formula_check.txt` | Deployed normalized values vs. `log1p(count/total*1e4)` | 177 B |
+| `duplicate_profile_summary.txt` / `duplicate_profile_groups.tsv` | Exact-duplicate raw-profile forensics | 139 B / 38 B |
+| `reused_barcode_tokens_across_runs.tsv` | Bare barcode tokens reused across runs | 238 B |
+| `deployed_hpi_distribution.tsv` | Deployed `hour_post_invasion` distribution | 82 B |
+| `deployed_parasite_stage_distribution.tsv` / `deployed_life_cycle_stage_distribution.tsv` / `deployed_liver_form_distribution.tsv` / `deployed_refine_state_distribution.tsv` / `deployed_pred_gametocyte_distribution.tsv` | Deployed stage/annotation-field distributions | ~30–70 B each |
+| `hpi_stage_gametocyte_summary.txt` | Combined HPI/stage/removal summary | 220 B |
+| `ena_PRJEB42435_runs.tsv` | ENA run report for the study accession | 948 B |
+| `ena_samples.xml` | ENA biosample XML for the three samples | 17,406 B |
+| `article.xml` | Europe PMC full text, PMC9380936 | 229,043 B |
+| `SHA256SUMS.txt` | Checksums of all files in this directory | — |
+
+No production script, source data, study RDS, integrated object or deployed
+application artifact was changed in this audit.

@@ -179,6 +179,33 @@ if (file.exists(ruberto1_candidate)) {
 }
 
 # ============================================================================
+# D036 resolution artifacts (2026-09-20 follow-up investigation): assert the
+# documented classification is consistent with its own evidence table,
+# rather than trusting D036_resolution.md's prose alone.
+# ============================================================================
+d036_rescue_tsv <- "audit/ruberto2022_1/D036_cell_level_rescue.tsv"
+if (file.exists(d036_rescue_tsv)) {
+  run_test("D036-rescue-evidence", "D036_cell_level_rescue.tsv is consistent with classification B (no rescue)", function() {
+    rescue <- read.delim(d036_rescue_tsv, stringsAsFactors = FALSE)
+    stopifnot(nrow(rescue) == 538)
+    zero_frac_candidate <- mean(rescue$kallisto_candidate_umi == 0)
+    median_candidate <- median(rescue$kallisto_candidate_umi)
+    # These thresholds encode what "not rescued" means quantitatively (Part 8
+    # of the task spec: "fixed" is never merely "counts went up") - if a
+    # future rerun of this investigation ever produces materially different
+    # numbers, this test should fail loudly rather than silently pass.
+    if (!(zero_frac_candidate > 0.9 && median_candidate == 0)) {
+      pipeline_fail(sprintf(
+        "D036_cell_level_rescue.tsv no longer shows the documented null-rescue pattern (zero_frac_candidate=%.3f, median_candidate=%.1f) - re-check D036_resolution.md's classification before trusting it",
+        zero_frac_candidate, median_candidate
+      ))
+    }
+  })
+} else {
+  skip_test("D036-rescue-evidence", "D036_cell_level_rescue.tsv consistency check", "D036_cell_level_rescue.tsv not present")
+}
+
+# ============================================================================
 # PHASE 2 tests (require the merged/integrated/annotated atlas -
 # pv_all_studies.rds - which Phase 1 does not regenerate)
 # ============================================================================

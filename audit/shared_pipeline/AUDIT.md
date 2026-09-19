@@ -330,7 +330,13 @@ argument name (`graph_name`) that does not exist on the installed Seurat
 argument is silently absorbed via `CheckDots()` (a warning, not an error),
 so the call falls back to the default `"RNA_snn"` graph already built by
 `integration.R`. **No graph literally named `"new_clustering"` is ever
-created anywhere in the repository** (D047). Cluster `"2"` = Female
+created anywhere in the repository** (D047). This is a confirmed
+code/reproducibility defect — the intended graph-selection argument does not
+work as written — but it does **not** by itself establish that the fallback
+`"RNA_snn"` graph was biologically the wrong graph to cluster on; whether
+clustering fidelity was actually compromised requires the marker/population
+validation in `AT29`/`AT30`, not an assumption drawn from the API mismatch
+alone. Cluster `"2"` = Female
 gametocyte and cluster `"4"` = Male gametocyte are hard-coded in
 `RenameIdents` (`singleR.R:296-320`); the historical script version instead
 had cluster `"5"` = Male, cluster `"4"` = Asexual — **proving cluster
@@ -371,7 +377,12 @@ the moment it (or a rerun's clustering) lands in the gametocyte cluster
 together: gate the removal filter on source-defined population type, not
 solely on downstream classifier output; scope the gametocyte-cluster
 override to skip any cell already carrying a source-selection-defined stage;
-and log every removed cell.
+and log every removed cell. Because zero cells are removed in the currently
+deployed build, fixing or redesigning this filter does not itself require
+any cell-membership regeneration today; the requirement is CONDITIONAL/
+POSSIBLE, not certain — it would only materialize on a future rerun where
+clustering assigns a source-defined mosquito-host cell to the gametocyte
+cluster while `D045` remains unfixed.
 
 ### Part 7 — Harmony/integration
 
@@ -387,7 +398,13 @@ objects remain as six unjoined layers at integration time, so
 `CreateIntegrationGroups` happens to return six groups — coincidentally
 matching the six studies today, but not by design, and would behave
 differently (or error) if `JoinLayers` timing, merge order, or the number of
-pre-existing layers per input ever changed (D051). Given Hazzard2024's
+pre-existing layers per input ever changed (D051). This is a confirmed
+API/intent mismatch and fragility, not by itself confirmed proof that the
+atlas was integrated with the wrong grouping: because the six layers present
+at `IntegrateLayers()` time currently map one-to-one to the six studies, the
+effective layer-derived grouping may already equal the intended per-study
+grouping today. The requirement to make this grouping explicit and testable
+stands regardless of whether current output happens to be correct. Given Hazzard2024's
 ~75.5% atlas share and simultaneous confounding across lifecycle/tissue/
 technology/condition, one global integration's validity cannot be asserted
 from code alone — it requires the quantitative tests in AT24–AT27

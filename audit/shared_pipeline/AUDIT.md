@@ -25,20 +25,44 @@ application code was modified. No cells were removed, no SingleR/Harmony/export
 step was rerun against real data beyond small, read-only, dimension-only
 diagnostics.
 
-## Important caveat: Hazzard2022 has no completed full forensic audit
+## Important caveat: Hazzard2022 is partially, not fully, audited
 
-Unlike the other five studies, **no `audit/hazzard2022/AUDIT.md` or equivalent
-full-audit file exists anywhere in this repository.** The only Hazzard2022
-evidence on record is a short preliminary/cross-study paragraph inside
-`audit/mancio_silva2022/AUDIT.md` (lines 1017–1046), predating the
+Unlike the other five studies, no dedicated `audit/hazzard2022/AUDIT.md` or
+equivalent full publication/accession/QC/provenance audit file exists anywhere
+in this repository. However, commit `ea006124` ("audit Hazzard2022 cell and
+expression lineage") **already completed a deterministic forensic
+cell/expression lineage audit**, adding `hazzard2022_cell_lineage.tsv`,
+`hazzard2022_lineage_summary.tsv`, `hazzard2022_expression_concordance.tsv`,
+`hazzard2022_raw_inventory.tsv`, `hazzard2022_exact_duplicate_profiles.tsv`,
+annotation/metadata evidence, and the deterministic audit scripts
+`audit_hazzard2022.R`/`audit_hazzard2022_emptydrops.R`. This evidence proves,
+for all 3,294 cells: exact source→study-RDS→deployed cell lineage with zero
+missing/extra cells at any boundary; zero study-RDS-vs-deployed raw and
+normalized expression mismatches; zero exact-duplicate expression profiles;
+and full raw-STARsolo-barcode membership for every retained cell. It is
+therefore false to say that only a preliminary paragraph exists, or that
+exact lineage/expression/duplicate checks were never performed.
+
+What remains genuinely incomplete is the **publication/accession/QC/provenance
+audit**: the only evidence for the sequencer conflict (`D023`), the literal
+`"NA"` day/host strings (`D024`), and the QC/inclusion-authority
+correspondence between PlaViSca's 2,858 retained cells and the publication's
+2,609+2,363 (`D022`) is still the short preliminary/cross-study paragraph
+inside `audit/mancio_silva2022/AUDIT.md` (lines 1017–1046), predating the
 full-forensic-audit methodology applied to Sa2020, Hazzard2024, Ruberto2022_1,
-and Ruberto2022_2. This consolidation therefore treats every Hazzard2022 figure
-(2,858 retained cells, the 2,609+2,363 publication comparison, the sequencer
-conflict, etc.) as **preliminary, not final**, and registers completing a full
-Hazzard2022 audit as a blocking decision (`DEC08`, defect `D025`) before any
-Hazzard2022-specific repair is finalized. This is a genuine gap in the
-forensic-audit phase, not an oversight of this consolidation task, and it
-should be surfaced to the user/project lead explicitly.
+and Ruberto2022_2.
+
+The correct classification is therefore: **forensic cell/expression lineage
+audit completed; authoritative publication/accession/QC/provenance audit
+remains incomplete.** This consolidation treats Hazzard2022's lineage and
+expression-concordance figures (3,294 cells, zero mismatches) as final, and
+treats only the publication/QC/provenance figures (2,858 vs. 2,609+2,363, the
+sequencer conflict, day/host provenance) as preliminary, and registers
+completing that remaining reconciliation as a blocking decision (`DEC08`,
+defect `D025`) before any Hazzard2022 QC/inclusion-driven repair is
+finalized. This is a genuine, narrower gap in the forensic-audit phase, not
+an oversight of this consolidation task, and it should be surfaced to the
+user/project lead explicitly.
 
 ## 1. What is wrong?
 
@@ -112,8 +136,10 @@ defects, and export/UI defects are registered in `confirmed_defects.tsv`
   validation metrics in `acceptance_tests.tsv` (AT24–AT27), not visual UMAP
   inspection.
 - **Hazzard2022's true retained-cell population and its correspondence to
-  the publication's QC** (D022, DEC04), blocked on the missing full audit
-  (D025, DEC08).
+  the publication's QC** (D022, DEC04), blocked on the remaining
+  publication/accession/QC/provenance audit (D025, DEC08) — the forensic
+  cell/expression lineage figures themselves are no longer uncertain (see
+  §3 below).
 - Several **source-provenance questions flagged but not resolved** by the
   original study audits and preserved here unchanged: Sa2020's exact
   NIH-1993-F3-equivalent strain origin question surfaces again in
@@ -127,18 +153,32 @@ defects, and export/UI defects are registered in `confirmed_defects.tsv`
   exact for all six studies: zero missing/extra cells at any boundary, for
   Mancio-Silva2022 (1,494), Sa2020 (9,766), Ruberto2022_1 (1,438),
   Ruberto2022_2 (9,947, the cleanest result in the project — zero mismatches
-  at every boundary), Hazzard2022 (3,294, preliminary), and Hazzard2024
-  (80,024).
-- **Raw expression counts** are proven byte-identical to their respective
-  source (deposited object or PlaViSca's own STARsolo reconstruction) for
-  every study **except** Ruberto2022_1's 538 replicate-2 cells (D036) and
-  with the caveat that Sa2020/Hazzard2022's equivalence to the *authors'*
-  own processing (not just to PlaViSca's own STARsolo output) is not proven
-  because comparable author-deposited raw/processed matrices were not
-  available.
-- **Normalized-expression concordance** with the stated formula
-  (`log1p(count/cell_total*10000)`) is proven exact for Mancio-Silva2022 and
-  Ruberto2022_2.
+  at every boundary), Hazzard2022 (3,294, forensic lineage audit complete —
+  see the caveat above; only its publication/QC correspondence remains
+  preliminary), and Hazzard2024 (80,024).
+- **Raw/normalized expression concordance boundaries must not be
+  overstated.** What is proven, precisely, differs by study:
+  - Mancio-Silva2022 and Ruberto2022_2: normalized-expression concordance
+    with the stated formula (`log1p(count/cell_total*10000)`) is proven
+    exact, and raw counts are proven byte-identical to source.
+  - **Hazzard2024** proves study-RDS → deployed raw/normalized expression
+    concordance (zero mismatches) and processed-list/study/deployed cell
+    lineage identity, but does **not** prove author-deposited count-table →
+    PlaViSca concordance: the author count-table ZIP (advertised MD5
+    `276aa89b96636e9091a05cd43166465e`) could not be downloaded (repeated
+    Zenodo requests returned HTTP 504), so study-RDS counts have never been
+    checked against the authors' own deposited values.
+  - **Hazzard2022** proves study-RDS → deployed raw/normalized expression
+    concordance (zero mismatches, `hazzard2022_expression_concordance.tsv`)
+    and raw-STARsolo-barcode membership for every retained cell
+    (`hazzard2022_raw_inventory.tsv`), but does **not** currently prove
+    STARsolo raw count *values* → study-RDS equality (only barcode presence
+    was checked against the raw matrix, not elementwise count values), and
+    comparable author-deposited raw/processed matrices were not available to
+    check PlaViSca's independent emptyDrops reprocessing against the
+    authors' own processing.
+  - Ruberto2022_1's expression is proven exact **except** for the 538
+    replicate-2 cells (D036).
 - The **Zhu SMRU1 → PvP01 orthology join itself** is a clean 1:1 mapping (no
   duplicate `InputOrtholog`/`GeneID`, no one-to-many/many-to-one artifacts) —
   the reference-construction problem is about labeling/gating and an
@@ -159,7 +199,17 @@ every defect/repair). In summary, ordered by dependency:
    metadata-only: they require regenerating the affected study RDS and every
    downstream export, but **not** re-normalization, re-integration, or
    re-clustering, per the stated principle that a metadata-only change does
-   not automatically require recomputing expression embeddings.
+   not automatically require recomputing expression embeddings, *provided*
+   cell IDs and counts remain unchanged. That said, a metadata-only fix is
+   not free of merged-object impact: because the deployed exports are built
+   from the merged atlas object's metadata, every corrected study-RDS field
+   must still propagate into the merged/final atlas object's metadata before
+   a corrected export can be produced — this is a metadata reconstruction/
+   update of the merged object, not a normalization/HVF/PCA/Harmony rerun,
+   and `regeneration_matrix.tsv` marks it explicitly as "Yes — metadata
+   reconstruction/update only" rather than "No", so that a corrected export
+   is never assumed to be producible from a stale merged-object metadata
+   snapshot.
 2. **Cell-membership-changing scientific decisions** (D011,D012,D018,D022,
    D036) require full downstream regeneration for the affected study —
    and, because the atlas is globally integrated, potentially for the whole
@@ -191,7 +241,9 @@ Twelve decisions are registered in `decision_register.tsv` (DEC01–DEC12),
 covering: the two Mancio-Silva2022 duplicate-inclusion questions (DEC01,
 DEC02); Sa2020's inclusion-population authority (DEC03); Hazzard2022's
 QC/inclusion authority and sequencer-conflict resolution, both blocked on
-completing its full audit (DEC04, DEC05, DEC08); Hazzard2024's
+completing its remaining publication/accession/QC/provenance audit (DEC04,
+DEC05, DEC08 — the forensic cell/expression lineage audit is already
+complete); Hazzard2024's
 biological-replicate model and unresolved strain-origin geography (DEC06);
 the sex-annotation authority question shared by Hazzard2024 and Sa2020
 (DEC07); Ruberto2022_1's expression-repair strategy (DEC09); the
@@ -204,8 +256,8 @@ an unresolved scientific question into an automatic correction.
 
 ## 6. What exact tests will define a successful repaired build?
 
-Twenty-nine machine-testable acceptance criteria are registered in
-`acceptance_tests.tsv` (AT01–AT29), covering identity/lineage integrity,
+Thirty machine-testable acceptance criteria are registered in
+`acceptance_tests.tsv` (AT01–AT30), covering identity/lineage integrity,
 metadata-vector-length and keying discipline, the "never literal NA" rule,
 source/inferred provenance separation, biological-validity gates (non-blood
 HPI, sporozoite broad-stage labeling, liver-cell gametocyte exposure,
@@ -213,8 +265,11 @@ zero-expression annotation), study-specific corrected-value checks, export
 key-alignment discipline, application-contract documentation, and — for
 integration specifically — quantitative validation metrics (batch mixing
 within biologically comparable populations only, marker preservation, study
-dominance checks, cluster-stability-across-reruns) rather than visual UMAP
-inspection alone.
+dominance checks) rather than visual UMAP inspection alone. Cluster
+reproducibility is deliberately split into two tests: same-seed determinism
+(AT29) and marker/population correspondence under seed/resolution
+perturbation (AT30), so that a numeric cluster ID is never treated as a
+stable biological identity by either test alone.
 
 ## Parts 3–9: detailed technical audits
 
@@ -295,15 +350,28 @@ labels; it specifies (DEC07, DEC12) what must be redesigned/revalidated.
 
 `singleR.R:460-465` removes any cell with `parasite_stages` in
 (Male/Female gametocyte) **and** `host_species` matching `"Anopheles"`. Today
-this removes **zero** cells only because an earlier, separate override
-block (`singleR.R:142-146`) already force-relabels the two known
-Anopheles-host populations (Ruberto2022_2, two Hazzard2022 runs) to
-"Sporozoite" before the filter runs — a structural, not designed, protection.
-Any future or currently-unenumerated Anopheles-host population is fully
-exposed to silent, unlogged deletion by a blood-stage-trained classifier's
-incompatible output (D049). The repaired policy (DEC10) must gate on
-source-defined population type, not solely on downstream classifier output,
-and must log every removed cell.
+this removes **zero** cells, and an earlier, separate override block
+(`singleR.R:142-146`) does force-relabel the two known Anopheles-host
+populations (Ruberto2022_2, Hazzard2022 runs 498/499) to "Sporozoite" before
+this filter runs. However, that earlier override does **not** structurally
+protect these cells: a later, unconditional gametocyte-cluster override
+(`singleR.R:329-331`, D045) runs *after* the Sporozoite override and *before*
+the deletion filter, and can silently re-overwrite any Sporozoite-labeled
+cell back to Male/Female gametocyte purely from its expression-cluster
+membership — with no exclusion condition checking whether the cell already
+carries a source-selection-defined stage. Zero cells are removed in the
+deployed build today only because none of these source-defined mosquito-host
+cells currently lands in the female/male gametocyte cluster; this is a
+property of today's data, not a property of the code's ordering. Ruberto2022_2's
+own audit (`D045`) already describes this mechanism correctly; the ordering
+here reconciles `D049` to the same finding. Any future or currently-known
+Anopheles-host population remains fully exposed to silent, unlogged deletion
+the moment it (or a rerun's clustering) lands in the gametocyte cluster
+(D049). The repaired policy (DEC10) must therefore fix `D045` and `D049`
+together: gate the removal filter on source-defined population type, not
+solely on downstream classifier output; scope the gametocyte-cluster
+override to skip any cell already carrying a source-selection-defined stage;
+and log every removed cell.
 
 ### Part 7 — Harmony/integration
 

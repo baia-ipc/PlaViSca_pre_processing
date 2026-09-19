@@ -1,19 +1,19 @@
 defect_or_repair	study_rds	merged_atlas_object	normalization	hvf_selection	scaling	pca	harmony	neighbor_graph	clustering	singleR	gametocyte_inference	umap_tsne	raw_export	normalized_export	scale_export	cleaned_metadata_export	application_data	earliest_responsible_repair_point
-D001-D010,D013 Mancio-Silva2022 metadata fixes	Yes	No	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes (bibliography join, if study_label changes)	silva.R
+D001-D010,D013 Mancio-Silva2022 metadata fixes	Yes	Yes - metadata reconstruction/update only (corrected study RDS metadata must propagate into the merged atlas object; cell IDs/counts unchanged)	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes (bibliography join, if study_label changes)	silva.R
 D011/D012 Mancio-Silva2022 duplicate inclusion decision	Yes (if approved)	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	silva.R (cell membership change propagates through entire downstream chain)
-D014/D015 Sa2020 gametocyte import code fixes	Yes (annotation-only re-import, not full rebuild)	No	No	No	No	No	No	No	No	No	Yes (source_sex_annotation field only)	No	No	No	No	Yes	No	Sa2020 gametocyte source-import script
-D016/D017/D019 Sa2020 metadata fixes	Yes	No	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	sa2020_pv_analysis_script.R
+D014/D015 Sa2020 gametocyte import code fixes	No (fix is inside singleR.R, not sa2020.rds construction; sa2020.rds itself is unchanged)	Yes - metadata reconstruction/update only (corrected source_sex_annotation column must propagate into the merged atlas object)	No	No	No	No	No	No	No	No	Yes (source_sex_annotation field only)	No	No	No	No	Yes	No	singleR.R Sa2020 gametocyte import block (L363-399)
+D016/D017/D019 Sa2020 metadata fixes	Yes	Yes - metadata reconstruction/update only	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	sa2020_pv_analysis_script.R
 D018 Sa2020 inclusion-population decision	Yes (if publication-faithful subset adopted)	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	sa2020_pv_analysis_script.R (cell membership change)
-D020/D021/D023/D024 Hazzard2022 metadata/annotation fixes	Yes	No	No	No	No	No	No	No	No	Yes (broad-field propagation, HPI masking)	No	No	Yes	Yes	Yes	Yes	Yes	hazzard2022_pv_analysis_script.R + singleR.R override block
+D020/D021/D023/D024 Hazzard2022 metadata/annotation fixes	Yes	Yes - metadata reconstruction/update only	No	No	No	No	No	No	No	Yes (broad-field propagation, HPI masking)	No	No	Yes	Yes	Yes	Yes	Yes	hazzard2022_pv_analysis_script.R + singleR.R override block
 D022 Hazzard2022 QC-method decision	Yes (if reprocessed with different QC)	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	hazzard2022_pv_analysis_script.R (cell membership change)
 D025 Hazzard2022 audit completion	No (audit-only)	No	No	No	No	No	No	No	No	No	No	No	No	No	No	No	No	N/A (blocks confidence in above rows, not code)
-D026-D029,D032,D033 Hazzard2024 metadata fixes	Yes	No	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	hazzard2024 chunk scripts
-D030/D031 Hazzard2024 schema decisions (replicate/geography)	Yes	No	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	hazzard2024 chunk scripts
+D026-D029,D032,D033 Hazzard2024 metadata fixes	Yes	Yes - metadata reconstruction/update only	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	hazzard2024 chunk scripts
+D030/D031 Hazzard2024 schema decisions (replicate/geography)	Yes	Yes - metadata reconstruction/update only	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	hazzard2024 chunk scripts
 D035 Hazzard2024 sex-calling authority (depends on D047/D048)	No (metadata reconciliation only, until D047/D048 fixed)	No	No	No	No	No	No	No	Yes (after D047/D048 fixed atlas-wide)	No	Yes (after D047/D048 fixed atlas-wide)	No	Yes	Yes	Yes	Yes	No	singleR.R gametocyte block (shared, atlas-wide)
 D036 Ruberto2022_1 replicate-2 expression repair	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	Yes	STARsolo alignment of SRR19573609/610 (count-generation stage; full atlas-wide recomputation required once cell counts for these 538 cells change)
 D037 Ruberto2022_1 gametocyte/HPI gating fix	No (annotation gating only)	No	No	No	No	No	No	No	No	Yes (gating logic)	Yes (gating logic)	No	No	No	No	Yes	No	singleR.R gating logic (shared)
-D038/D039 Ruberto2022_1 metadata fixes	Yes	No	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	ruberto2022_1_pv_analysis_script.R
-D040-D043 Ruberto2022_2 metadata fixes	Yes	No	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	ruberto2022_2_pv_analysis_script.R
+D038/D039 Ruberto2022_1 metadata fixes	Yes	Yes - metadata reconstruction/update only	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	ruberto2022_1_pv_analysis_script.R
+D040-D043 Ruberto2022_2 metadata fixes	Yes	Yes - metadata reconstruction/update only	No	No	No	No	No	No	No	No	No	No	Yes	Yes	Yes	Yes	Yes	ruberto2022_2_pv_analysis_script.R
 D044 Ruberto2022_2 HPI gating fix	No	No	No	No	No	No	No	No	No	Yes (gating/masking)	No	No	No	No	No	Yes	No	singleR.R HPI masking logic (shared)
 D045 singleR.R override-scoping fix (Ruberto2022_2 latent risk)	No	No	No	No	No	No	No	No	No	Yes (code fix)	Yes (scoping condition)	No	No	No	No	Yes (after fix applied and re-exported)	No	singleR.R override ordering (shared, protects future reruns)
 D046 Ruberto2022_2 vocabulary/schema reconciliation	No	No	No	No	No	No	No	No	No	No	No	No	No	No	No	Yes	No	singleR.R / flatten_data.R export layer (shared)

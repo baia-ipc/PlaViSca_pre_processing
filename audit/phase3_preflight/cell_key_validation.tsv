@@ -1,5 +1,5 @@
 "artifact"	"row_count"	"column_count"	"unique_rownames"	"rowname_set_equals_cleaned_metadata"	"rowname_order_equals_cleaned_metadata"	"metadata_column_count"	"gene_column_count"	"suspicious_gene_columns"	"status"	"notes"
-"raw"	105963	6948	TRUE	TRUE	FALSE	88	6860	""	"SET_PASS_ORDER_MISMATCH"	"Expression exports share sorted order; cleaned mr_data retains Seurat order. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
-"normalized"	105963	6948	TRUE	TRUE	FALSE	88	6860	""	"SET_PASS_ORDER_MISMATCH"	"Expression exports share sorted order; cleaned mr_data retains Seurat order. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
-"scaled"	105963	2088	TRUE	TRUE	FALSE	88	2000	""	"SET_PASS_ORDER_MISMATCH"	"Expression exports share sorted order; cleaned mr_data retains Seurat order. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
+"raw"	105963	6948	TRUE	TRUE	TRUE	88	6860	""	"PASS"	"All cell-indexed exports use canonical lexicographically sorted cell keys. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
+"normalized"	105963	6948	TRUE	TRUE	TRUE	88	6860	""	"PASS"	"All cell-indexed exports use canonical lexicographically sorted cell keys. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
+"scaled"	105963	2088	TRUE	TRUE	TRUE	88	2000	""	"PASS"	"All cell-indexed exports use canonical lexicographically sorted cell keys. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
 "cleaned_metadata"	105963	88	TRUE	TRUE	TRUE	88	0	""	"PASS"	"Reference cell key"

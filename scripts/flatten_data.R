@@ -113,6 +113,18 @@ mr_data <- mr_data %>%
   ) %>%
   select(-any_of(internal_only_columns))
 
+# AT17 release closure: one canonical cell order for every cell-indexed app
+# export. The expression exports have always used lexicographically sorted
+# cell keys via red_df; apply that same deterministic order to mr_data itself
+# before any downstream extraction or serialization.
+canonical_cell_ids <- sort(rownames(mr_data))
+assert_unique_cell_ids(canonical_cell_ids, label = "canonical export cell IDs")
+mr_data <- mr_data[canonical_cell_ids, , drop = FALSE]
+assert_rowname_order_equal(
+  rownames(mr_data), canonical_cell_ids,
+  label_a = "mr_data", label_b = "canonical_cell_ids"
+)
+
 # D062: never export a literal "NA" string - this is a fail-loud build gate,
 # not a silent app-side workaround.
 character_cols <- names(mr_data)[vapply(mr_data, is.character, logical(1))]
@@ -129,8 +141,11 @@ red_df <- mr_data %>%
     any_of(contains("t_sne"))
   )
 
-# sort by row names
-red_df <- red_df[order(rownames(red_df)), ]
+# mr_data is already in the canonical sorted order; retain and assert it.
+assert_rowname_order_equal(
+  rownames(red_df), canonical_cell_ids,
+  label_a = "red_df", label_b = "canonical_cell_ids"
+)
 
 # D055/AT16/AT17: every expression matrix is explicitly key-aligned to
 # red_df before any cbind - exact rowname-set AND order equality asserted,
@@ -163,6 +178,9 @@ scale_df <- cbind(red_df, as.matrix(scale_exp))
 assert_unique_cell_ids(rownames(normalize_df), label = "normalize_df")
 assert_rowname_set_equal(rownames(normalize_df), rownames(raw_df), "normalize_df", "raw_df")
 assert_rowname_set_equal(rownames(normalize_df), rownames(scale_df), "normalize_df", "scale_df")
+assert_rowname_order_equal(rownames(mr_data), rownames(normalize_df), "mr_data", "normalize_df")
+assert_rowname_order_equal(rownames(mr_data), rownames(raw_df), "mr_data", "raw_df")
+assert_rowname_order_equal(rownames(mr_data), rownames(scale_df), "mr_data", "scale_df")
 
 # save normalized, raw and scaled data (candidate/staging paths - see
 # section 13 note above; never the deployed PlaViSca/data/*.rds files)

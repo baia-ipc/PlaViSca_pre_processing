@@ -78,7 +78,7 @@ for (nm in names(artifact_paths)) {
     status = if (!anyDuplicated(ids) && setequal(ids, reference_ids) &&
                  !any(!grepl("^PVP01_", gene_cols)))
       if (identical(ids, reference_ids)) "PASS" else "SET_PASS_ORDER_MISMATCH" else "FAIL",
-    notes = "Expression exports share sorted order; cleaned mr_data retains Seurat order. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
+    notes = "All cell-indexed exports use canonical lexicographically sorted cell keys. Gene columns are columns absent from mr_data and all use PVP01_ identifiers."
   )
   rm(x); gc()
 }

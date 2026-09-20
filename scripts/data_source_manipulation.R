@@ -50,6 +50,18 @@ Study_label <- c(
   STUDY_LABELS[["mancio_silva2022"]]
 )
 
+# D067 release closure: authoritative PMIDs are the exact per-study constants
+# already carried by every atlas cell. Keeping the key in the bibliography
+# permits a direct startup foreign-key check instead of a label-only warning.
+study_pmid <- c(
+  "32365102", # Sa2020
+  "35926062", # Ruberto2022_2
+  "36093191", # Ruberto2022_1
+  "36525464", # Hazzard2022
+  "39223117", # Hazzard2024
+  "35443155"  # Mancio-Silva2022
+)
+
 # Authors
 Authors <- c(
   "Sà JM et al.",
@@ -104,7 +116,7 @@ Number_of_cells <- c(
 # maintained vectors) - all seven vectors must have exactly 6 entries, one
 # per study, in the same order.
 n_studies <- length(STUDY_LABELS)
-for (v in list(Publication_date, Study_label, Authors, Journal, Title, DOI, Number_of_cells)) {
+for (v in list(Publication_date, Study_label, study_pmid, Authors, Journal, Title, DOI, Number_of_cells)) {
   assert_cardinality(v, n_studies, label = "data_source_manipulation.R study vector")
 }
 assert_unique_cell_ids(Study_label, label = "data_source.csv Study_label")
@@ -119,6 +131,7 @@ if (length(unexpected_labels) > 0) {
 df <- data.frame(
   Publication_date = Publication_date,
   Study_label = Study_label,
+  study_pmid = study_pmid,
   Authors = Authors,
   Journal = Journal,
   Title = Title,

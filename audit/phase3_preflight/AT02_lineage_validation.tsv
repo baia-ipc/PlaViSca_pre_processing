@@ -1,0 +1,7 @@
+study	approved_final_cells	explicit_source_to_study_cells	study_to_final_set_evidence	status	notes
+Mancio-Silva2022	1494	1494	1494	PASS	source_to_final_lineage.tsv is one row per retained source cell and records candidate export positions.
+Sa2020	9766	9432	9766	FAIL	sa2020_lower_threshold_cell_lineage.tsv is the broadest committed source lineage and contains 9432 present unique final IDs; 334 retained candidate cells lack explicit source-to-study rows.
+Hazzard2022	3294	3294	3294	PASS	hazzard2022_cell_lineage.tsv records one-to-one source/run/barcode to final IDs.
+Hazzard2024	80024	80024	80024	PASS	cell_lineage.tsv records one row per source cell with study and deployed presence.
+Ruberto2022_1	1438	1438	1438	PASS	hep59_to_study_cellid_map.tsv and author cell crosswalk validation cover the complete author matrix.
+Ruberto2022_2	9947	9947	9947	PASS	lineage_table.tsv and lineage_summary.txt report complete unique mapping with no extras or missing cells.

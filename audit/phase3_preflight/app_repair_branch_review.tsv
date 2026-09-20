@@ -1,0 +1,14 @@
+check	status	evidence	notes
+remote_branch_availability	PENDING	At 2026-09-20T22:41:48+07:00, git ls-remote --heads github plavisca-app-production-repair returned no SHA.	The other agent has switched its active app worktree to a local plavisca-app-production-repair branch with uncommitted changes; QA did not inspect or mutate that in-progress state.
+reviewed_branch_sha	PENDING		No immutable remote candidate existed.
+R_syntax_static_parse	PENDING		Await immutable remote branch.
+config_to_candidate_schema	PENDING		Await immutable remote branch.
+obsolete_name_grep	PENDING		Await immutable remote branch.
+AT19	PENDING_APP		Current master baseline fails; no repaired remote candidate reviewed.
+AT20	PENDING_APP		Current master baseline fails; no repaired remote candidate reviewed.
+bibliography_contract	PENDING		Candidate-side expected result is in bibliography_contract.tsv.
+no_candidate_binary_committed	PENDING		Await immutable remote branch.
+no_absolute_developer_paths	PENDING		Await immutable remote branch.
+no_deployment_action	PENDING		Await immutable remote branch.
+stale_preprocessing_removed	PENDING		Await immutable remote branch.
+safe_data_switching	PENDING		Await immutable remote branch.

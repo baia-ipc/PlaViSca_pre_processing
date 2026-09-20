@@ -1,0 +1,12 @@
+check	status	evidence	notes
+AT01_AT30_technical_closure	PASS	audit/phase3_preflight/acceptance_matrix_AT01_AT30.tsv	29 PASS; 0 FAIL; 1 PENDING_DECISION; 0 PENDING_APP.
+AT14_decision	PENDING_DECISION	audit/shared_pipeline/decision_register.tsv	DEC01/DEC02 still require explicit project-lead approval; current retained/flagged membership unchanged.
+Sa2020_lineage	PASS	audit/mancio_silva2022/sa2020_authoritative_cell_lineage.tsv	9766/9766 retained cells; zero missing, duplicate, or extra final IDs.
+canonical_cell_order	PASS	audit/phase3_preflight/AT17_cell_order_validation.tsv	All four cell-indexed exports share canonical lexicographic order.
+scientific_invariants	PASS	audit/phase3_preflight/candidate_hash_validation.tsv	Atlas, raw, normalized, scaled, and six study object hashes unchanged.
+final_manifest	PASS	audit/phase3_preflight/AT23_manifest_validation.tsv	Authoritative final manifest complete; all hashes and sizes independently verified.
+marker_preservation	PASS	audit/phase3_preflight/AT25_marker_preservation_validation.tsv	Both predeclared female/male criteria pass.
+bibliography_contract	PASS	audit/phase3_preflight/bibliography_contract.tsv	Six labels/counts/PMIDs agree exactly with atlas metadata.
+stage_missing_cases	PASS	audit/phase3_preflight/stage_missing_validation.tsv	Exactly 7 low-UMI Hazzard2024 plus 14 flagged Mancio .1 cells; no unexpected case.
+app_AT19_AT20	PASS	audit/phase3_preflight/app_repair_branch_review.tsv	Independent immutable-commit evidence passes; final changed data files require app retest.
+final_release_data_candidate	PASS	audit/phase3_preflight/REPORT.md	Data candidate accepted subject only to the explicitly non-technical AT14 decision.

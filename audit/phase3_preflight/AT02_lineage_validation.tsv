@@ -1,6 +1,6 @@
 study	approved_final_cells	explicit_source_to_study_cells	study_to_final_set_evidence	status	notes
 Mancio-Silva2022	1494	1494	1494	PASS	source_to_final_lineage.tsv is one row per retained source cell and records candidate export positions.
-Sa2020	9766	9432	9766	FAIL	sa2020_lower_threshold_cell_lineage.tsv is the broadest committed source lineage and contains 9432 present unique final IDs; 334 retained candidate cells lack explicit source-to-study rows.
+Sa2020	9766	9766	9766	PASS	sa2020_authoritative_cell_lineage.tsv records exact STARsolo run plus raw-barcode source coordinates for every retained cell; 9432 also occur in the lower-threshold author workbook and the remaining 334 are explicitly reconstructed from audited run/barcode identity without inventing author IDs.
 Hazzard2022	3294	3294	3294	PASS	hazzard2022_cell_lineage.tsv records one-to-one source/run/barcode to final IDs.
 Hazzard2024	80024	80024	80024	PASS	cell_lineage.tsv records one row per source cell with study and deployed presence.
 Ruberto2022_1	1438	1438	1438	PASS	hep59_to_study_cellid_map.tsv and author cell crosswalk validation cover the complete author matrix.

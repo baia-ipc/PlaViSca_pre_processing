@@ -1,0 +1,47 @@
+record_type	key	value	verification_status	path	byte_size	sha256	cell_count	study	notes
+build_identity	authoritative_manifest	audit/phase3_preflight/final_release_manifest.tsv	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+build_identity	release_branch	plavisca-release-closure	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+build_identity	final_preprocessing_code_commit	8ce8828985aa75ea625bb4e762465f6ab8689905	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	Frozen technical code/evidence snapshot; final documentation commit is its descendant.
+build_identity	phase2_scientific_build_commit	54c6b9581ff5268422ddffda42ce457bf09c5b55	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+build_identity	independent_QA_commit	a57be450a84d42e47a67d1120320e8a5536797dd	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+build_identity	application_RC_commit_read_only	c44cde046acf9791f5dd8a83f884d2f83ec08486	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+build_identity	release_date	2026-09-21	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+environment	R	4.3.3	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+environment	Seurat	5.3.0	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+environment	SeuratObject	5.2.0	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+environment	harmony	1.2.3	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+environment	SingleR	2.4.0	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+environment	pixi_manifest	.	AVAILABLE_AND_VERIFIED	scripts/pixi.toml	1096	d9f3b1ec79cc17d19fb78bef1de75b406052342ab186f6a2c3a1c120f57a895a	NA	.	Closure validation environment definition
+environment	pixi_lock	.	AVAILABLE_AND_VERIFIED	scripts/pixi.lock	213307	c4378b47a51419af2f38d329b739830348c0b69616467ce238999ecc0d4cc11c	NA	.	Resolved closure validation environment
+parameter	integration_seed	123	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	Recorded by Phase-2 integration manifest row
+parameter	integration_feature_count	5203	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+parameter	HVG_PCA_feature_count	2000	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+parameter	production_cluster_resolution	0.05	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+parameter	AT30_perturbed_resolution	0.08	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+parameter	total_cell_count	105963	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+study_count	Mancio-Silva2022	1494	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+study_count	Sa2020	9766	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+study_count	Hazzard2022	3294	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+study_count	Hazzard2024	80024	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+study_count	Ruberto2022_1	1438	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+study_count	Ruberto2022_2	9947	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+provenance	Ruberto2022_1_source_of_counts	author_processed_object_raw_umi	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+provenance	Ruberto2022_1_counting_pipeline	kallisto_bustools	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+provenance	Ruberto2022_1_reference	PlasmoDB-51_PvivaxP01_AnnotatedTranscripts	AVAILABLE_AND_VERIFIED	.	NA	.	NA	.	.
+scientific_input	Mancio-Silva2022_study_object	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/silva2022.rds	967911	70782fe4aed2963ef2ca167bfe204d7a1a5320455dba3bb5a4586f836f74d9a4	1494	Mancio-Silva2022	.
+scientific_input	Sa2020_study_object	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/sa2020.rds	8807324	c31d16e8b0731d163633b0ca2942663fa816b1dd5fff902ea84fcb0490391a6e	9766	Sa2020	.
+scientific_input	Hazzard2022_study_object	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/hazzard2022.rds	1356700	9787f1a4af016a59cd67b322489af4308aa62a6e1a97d074aac0ffa05180fe78	3294	Hazzard2022	.
+scientific_input	Hazzard2024_study_object	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/hazzard2024.rds	102402015	febb1377254756441aabb4fa8505e8d74aee2fe6adbbe1dfc2eaab9d608a9e18	80024	Hazzard2024	.
+scientific_input	Ruberto2022_1_study_object	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/ruberto2022_1.rds	5553310	802641469151745c92073242d2eb98aaeb57cef07ba2064d52b365f41afeb173	1438	Ruberto2022_1	.
+scientific_input	Ruberto2022_2_study_object	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/ruberto2022_2.rds	2714179	b20c625d10ed3ad0fecef2e388672f8a29df5c90449c225f2a0f0737bf49a68a	9947	Ruberto2022_2	.
+scientific_input	Ruberto2022_1_author_source	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/data/Hep59.1.2.seu_20aug2025.rds	13771658	87a64c47530ff5b1b140cc064269fbd8bf1160903efe7fb0b14a1bed5a998bce	1438	Ruberto2022_1	.
+reference_input	PlasmoDB68_GFF	.	AVAILABLE_AND_VERIFIED	scripts/ref/PlasmoDB-68_PvivaxP01.gff	8132311	51c505fea934d33fa32c1fcb9e7d1ff0e7ffd67f2f0ae6f7f3a1ea1c366861c2	NA	.	.
+reference_input	Hazzard2024_authoritative_run_table	.	AVAILABLE_AND_VERIFIED	audit/hazzard2024/authoritative_run_table.tsv	26154	9bc8fd9fd66561a556f089b93ff24b6b24230446fb45ca4ed82faf4e9d9dfaa3	NA	.	.
+reference_input	Sa2020_authoritative_sample_crosswalk	.	AVAILABLE_AND_VERIFIED	audit/mancio_silva2022/sa2020_authoritative_sample_crosswalk.tsv	1088	dc8511e37ed477e378f67a833085bb323876186f30c5df06f28ffb707132a886	NA	.	.
+reference_input	Sa2020_authoritative_cell_lineage	.	AVAILABLE_AND_VERIFIED	audit/mancio_silva2022/sa2020_authoritative_cell_lineage.tsv	3493326	1b050bb61ed5e3ca95f48d9d45dc511eb89757320af53fe469e200f55658d5f8	9766	Sa2020	.
+scientific_output	pv_all_studies	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/pv_all_studies.rds	639534107	15fe6371810f53e3dcb0210a2fe70a19da1c7c607ec3adb8cec0c64a6a519c8b	105963	.	.
+application_output	normalize_df	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/data/candidate_export/normalize_df.rds	489254038	8a87841094655148422d157635e6ed50d4bb9dba7735798cc9e415ae069a8740	105963	.	.
+application_output	raw_df	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/data/candidate_export/raw_df.rds	109371235	15df4435d666cef1e3ec4d2d977f507a4415ecf3a8bd5d952199dda42e009cf8	105963	.	.
+application_output	scale_df	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/data/candidate_export/scale_df.rds	205718696	86d08ff3eea411c01437bc0f6ca461bd65184ebba032cab381adb700e7ea1cbf	105963	.	.
+application_output	cleaned_dataset	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/data/candidate_export/cleaned_dataset.rds	19354233	0be6e6dcde0721d11193d89f1a122ae87b24aac5e8ffc776fcd9262ddbfba7a8	105963	.	AT17 canonical lexicographic cell order; non-cell tables unchanged
+application_output	data_source	.	AVAILABLE_AND_VERIFIED	/home/baia/prj/plavisca/pre_process_data/data/data_source.csv	2057	cd17242801bb863251c7782cfd240f55af26f2d54fa4ebe7366b03cb6a8e892c	6	.	Six bibliography rows with verified study_pmid

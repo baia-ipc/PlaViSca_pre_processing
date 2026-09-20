@@ -1,0 +1,9 @@
+check	status	detail
+manifest_unique_keys	PASS	46 records
+required_records_present	PASS	26 required records
+artifact_files_exist	PASS	19 artifact paths checked
+artifact_sha256_match	PASS	19 SHA256 values recomputed
+artifact_sizes_match	PASS	19 byte sizes checked
+verified_status_explicit	PASS	availability and verification state is explicit
+six_study_counts_present	PASS	all six exact study counts recorded
+all_final_outputs_have_cell_counts	PASS	atlas and all application outputs carry row/cell counts

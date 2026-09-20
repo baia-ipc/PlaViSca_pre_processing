@@ -52,6 +52,63 @@ files <- c(
 
 pv.combined.all <- lapply(files, readRDS)
 
+# ============================================================================
+# Phase 2 Part 6: integration feature universe. Capture each study's own
+# feature panel BEFORE merge() zero-pads everything to the union - merging
+# first and inspecting rownames(pv.combined.all) afterward would make every
+# study look "measured" for every gene, hiding exactly the reference-
+# incompatibility this step exists to avoid encoding into PCA/Harmony.
+# ============================================================================
+study_feature_sets <- lapply(pv.combined.all, rownames)
+names(study_feature_sets) <- files
+
+atlas_feature_universe <- Reduce(union, study_feature_sets)
+integration_features <- Reduce(intersect, study_feature_sets)
+
+cat(sprintf(
+  "[integration.R] Feature universe: %d total (union across 6 studies), %d integration-eligible (intersection, measured in all 6 studies), %d lost to reference incompatibility (union - intersection)\n",
+  length(atlas_feature_universe), length(integration_features),
+  length(atlas_feature_universe) - length(integration_features)
+))
+
+dir.create("audit/phase2_rebuild", showWarnings = FALSE, recursive = TRUE)
+feature_universe_tbl <- data.frame(
+  feature = atlas_feature_universe,
+  stringsAsFactors = FALSE
+)
+for (f in files) {
+  feature_universe_tbl[[paste0("measured_in__", sub("\\.rds$", "", f))]] <-
+    feature_universe_tbl$feature %in% study_feature_sets[[f]]
+}
+feature_universe_tbl$n_studies_measured <- rowSums(
+  feature_universe_tbl[, paste0("measured_in__", sub("\\.rds$", "", files)), drop = FALSE]
+)
+feature_universe_tbl$integration_eligible <- feature_universe_tbl$feature %in% integration_features
+write.table(
+  feature_universe_tbl, "audit/phase2_rebuild/feature_universe.tsv",
+  sep = "\t", quote = FALSE, row.names = FALSE
+)
+
+# Feature-availability table (Part 6/24): distinguishes "zero expression"
+# from "gene unavailable/not quantified in that study" at study level - the
+# per-cell/per-study-panel version of the same distinction
+# phase2_feature_coverage.tsv already makes for Ruberto2022_1 specifically.
+feature_availability_tbl <- do.call(rbind, lapply(files, function(f) {
+  data.frame(
+    study_file = f,
+    feature = atlas_feature_universe,
+    availability = ifelse(
+      atlas_feature_universe %in% study_feature_sets[[f]],
+      "measured", "not_measured_reference_incompatible"
+    ),
+    stringsAsFactors = FALSE
+  )
+}))
+write.table(
+  feature_availability_tbl, "audit/phase2_rebuild/feature_availability_by_study.tsv",
+  sep = "\t", quote = FALSE, row.names = FALSE
+)
+
 # merge all layers
 pv.combined.all <- Reduce(function(x, y) merge(x, y = y), pv.combined.all)
 
@@ -116,14 +173,32 @@ if (!identical(all_studies_represented, expected_studies)) {
 cat("[integration.R] Verified: one integration group per study, zero ambiguous/mixed-study layers, all 6 studies represented.\n")
 
 pv.combined.all <- NormalizeData(pv.combined.all)
-pv.combined.all <- FindVariableFeatures(
-    pv.combined.all,
+
+# Phase 2 Part 6: HVG selection is restricted to integration_features (the
+# 5,203-gene intersection measured in all 6 studies), computed on a
+# separate subsetted copy so the vst variance ranking is never distorted by
+# genes that are structurally zero (reference-absent, not biologically
+# zero) in one or more studies - exactly the "encode study/reference
+# identity into the matrix" failure mode Part 6 warns against. The main
+# object keeps its full union assay (needed for per-study raw/normalized
+# exports in flatten_data.R); only VariableFeatures/scale.data/PCA are
+# computed from the integration-eligible subset.
+integration_subset <- subset(pv.combined.all, features = integration_features)
+integration_subset <- FindVariableFeatures(
+    integration_subset,
     selection.method = "vst",
     nfeatures = 2000
-    # nfeatures = nrow(pv.combined.all) * 0.3
 )
-pv.combined.all <- ScaleData(pv.combined.all)
-pv.combined.all <- RunPCA(pv.combined.all)
+n_hvg <- length(VariableFeatures(integration_subset))
+cat(sprintf(
+  "[integration.R] Highly variable genes selected from the %d-gene integration-eligible universe: %d (contributed to PCA)\n",
+  length(integration_features), n_hvg
+))
+
+VariableFeatures(pv.combined.all) <- VariableFeatures(integration_subset)
+pv.combined.all <- ScaleData(pv.combined.all, features = VariableFeatures(pv.combined.all))
+pv.combined.all <- RunPCA(pv.combined.all, features = VariableFeatures(pv.combined.all))
+rm(integration_subset)
 pv.combined.all <- RunUMAP(
     pv.combined.all,
     reduction = "pca",
@@ -204,5 +279,8 @@ record_build_manifest(
     script_path = "scripts/integration.R",
     cell_count = ncol(pv.combined.all),
     seed = 123,
-    notes = "Fixes D050,D051: removed non-functional group_by argument, added explicit layer->study grouping assertions/diagnostics before Harmony"
+    notes = sprintf(
+      "Fixes D050,D051: removed non-functional group_by argument, added explicit layer->study grouping assertions/diagnostics before Harmony. Phase 2 Part 6: HVG/PCA restricted to the %d-gene integration-eligible intersection (of %d-gene atlas union) - see audit/phase2_rebuild/feature_universe.tsv and feature_availability_by_study.tsv",
+      length(integration_features), length(atlas_feature_universe)
+    )
 )

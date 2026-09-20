@@ -233,6 +233,7 @@ if (length(membership$retained) > 0) {
   for (rid in names(membership$retained)) {
     n_cells <- ncol(membership$retained[[rid]])
     membership$retained[[rid]]$sample_type <- rep("Host blood", n_cells)
+    membership$retained[[rid]]$tissue_or_sample_type <- rep("Host blood", n_cells) # Phase 2 fix: this field, not sample_type, is what singleR.R reads for IDC eligibility
     membership$retained[[rid]]$retained_by_plavisca_qc <- rep(TRUE, n_cells)
   }
 }
@@ -248,6 +249,7 @@ for (rid in names(membership$pending_filter)) {
     membership$pending_filter[[rid]][[f]] <- rep(NA, n_cells)
   }
   membership$pending_filter[[rid]]$sample_type <- rep(NA_character_, n_cells)
+  membership$pending_filter[[rid]]$tissue_or_sample_type <- rep(NA_character_, n_cells)
   membership$pending_filter[[rid]]$retained_by_plavisca_qc <- rep(FALSE, n_cells)
 }
 

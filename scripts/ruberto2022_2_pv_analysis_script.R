@@ -5,12 +5,10 @@
 ##### --------------------------------------------------------------------------
 ##### 1. Load libraries
 ##### --------------------------------------------------------------------------
-library(DropletUtils)
 library(tidyverse)
-library(rtracklayer)
 library(Seurat)
-library(scater)
-library(SingleCellExperiment)
+# DropletUtils/rtracklayer/scater/SingleCellExperiment are only needed by the
+# slow STARsolo-reprocessing fallback path below - loaded lazily there.
 
 # set current working directory
 .plavisca_root <- local({
@@ -37,169 +35,122 @@ setwd(.plavisca_root)
 source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
-##### 2. Load annotation files
+##### 2-5. Build per-run expression objects (all_pv).
+#####
+##### PHASE 2 efficiency fix (2026-09-20, at user request): expression
+##### counts/cell-membership are unchanged by Phase 1/2 for this study (only
+##### metadata was buggy - D040-D043,D069 below); Part II of the Phase 2 spec
+##### requires non-Ruberto2022_1 studies' expression matrices to remain
+##### consistent with their audited production source. Membership itself is
+##### independently determined below (Section 7) from
+##### data/6_PvSPZ.BS.combined.rds's Stage=="Sporozoite" selection, not from
+##### STARsolo. When a prior ruberto2022_2.rds with the expected 9947-cell,
+##### full 6811-feature panel already exists, its RNA counts for the union of
+##### the 3 runs are reused directly (split back into a per-run all_pv list,
+##### then re-subset to the same sporozoite cell list below) instead of
+##### re-reading STARsolo's raw barcode matrices - bit-identical counts,
+##### skips the slow I/O. Falls back to full STARsolo reprocessing (which
+##### then also needs the fuller, pre-subset raw barcode space) if no
+##### reusable artifact exists.
 ##### --------------------------------------------------------------------------
-# Before beginning the data processing steps, let's upload the PvP01 gene
-# annotation file. This will come in handy when we perform differential gene
-# expression analyses and for the generation of the data tables.
-
-pv.gff <- import.gff3("./scripts/ref/PlasmoDB-68_PvivaxP01.gff")
-pv.gff <- as.data.frame(pv.gff)
-gene.info <- pv.gff %>%
-  mutate(seurat = gsub("_", "-", ID)) %>%
-  filter(type == "protein_coding_gene")
-
-gene.info <- as.data.frame(gene.info)
-gene.info$GeneDescription <- paste(
-  gene.info$ID,
-  gene.info$description,
-  sep = "::"
-)
-
-rRNA_pv <- pv.gff %>%
-  as_tibble() %>%
-  filter(type == "rRNA") %>%
-  select(ID, description) %>%
-  mutate(ID = gsub("\\.1", "", ID))
-##### --------------------------------------------------------------------------
-##### 3. Load scRNAseq data in to R
-##### --------------------------------------------------------------------------
-# Great, we will now  upload the aligned data to R. We will use the data from
-# Sa et al. as an example, PMID:32365102. This dataset contains 10 single-cell
-# RNAs-seq datasets from P. vivax parasites.
-# Choose one or more of these single-cell RNA-seq datasets for processing.
-# For the data that you choose to analyze, simply unhash the sample
-# corresponding to the the one that you choose. Be sure to also change the
-# path of the read_count_input() function so that it matches the location on your
-# system
-
-# For the sample(s) that you choose, please provide information linked to how
-# the sample(s) were processed. Simply go to https://www.ncbi.nlm.nih.gov/sra,
-# type in the SRR accession number and you will find this information.
 study_num <- "35926062"
 samples <- paste0("ERR5087", 438:440)
+run_suffixes <- str_extract(samples, "\\d{3}$")
+existing_path <- "ruberto2022_2.rds"
 
-all_pv <- list()
-
-for (sample_id in samples) {
-  path <- file.path(
-    paste0(
-      "./counts/",
-      study_num,
-      "/",
-      sample_id,
-      "_solo_out/Solo.out/GeneFull/raw"
-    )
-  )
-
-  sce <- read10xCounts(path, col.names = TRUE)
-  assign(sample_id, sce)
-  all_pv[[sample_id]] <- sce
-}
-
-rm(list = samples)
-
-##### --------------------------------------------------------------------------
-##### 4. Processing step 1: select droplets containing cells
-##### --------------------------------------------------------------------------
-# We will now process the *P. vivax* mixed blood stage parasite data.
-# Note: When running Kallisto Bustools, we generated both an unfiltered
-# countmatrix. This means that we need to run a droplet detection step to
-# select droplets containing cells versus droplets did not capture any cells or
-# droplets that captured ambient RNA
-
-# Since we are interested in assessing changes in protein-coding transcripts,
-# we can remove rRNA from the dataset.
-
-for (i in 1:length(all_pv)) {
-  all_pv[[i]] <- all_pv[[i]][!rownames(all_pv[[i]]) %in% rRNA_pv$ID, ]
-}
-# Let's now generate a 'knee plot' to visualize the distribution of RNA per cell.
-# This provides a nice visual for determining droplet-containing versus
-# empty versus ambient RNA containing cells.
-# Visualizes the inflection point to filter empty droplets
-
-# Create the PDF file
-pdf(paste0(study_num, "_knee_plots.pdf"), width = 12, height = 6)
-par(mfrow = c(1, 2))
-
-bcrank <- list()
-uniq <- list()
-
-for (i in seq_along(all_pv)) {
-  bcrank[[i]] <- barcodeRanks(all_pv[[i]])
-  uniq[[i]] <- !duplicated(bcrank[[i]]$rank)
-
-  plot(
-    bcrank[[i]]$rank[uniq[[i]]],
-    bcrank[[i]]$total[uniq[[i]]],
-    log = "xy",
-    xlab = "Rank",
-    ylab = "Total UMI Count",
-    cex.lab = 1.2,
-    main = names(all_pv)[i]
-  )
-
-  abline(h = metadata(bcrank[[i]])$inflection, col = "darkgreen", lty = 2)
-  abline(h = metadata(bcrank[[i]])$knee, col = "dodgerblue", lty = 2)
-  legend(
-    "bottomleft",
-    legend = c("Inflection", "Knee"),
-    col = c("darkgreen", "dodgerblue"),
-    lty = 2,
-    cex = 1.2
-  )
-
-  # Start new page after every 2 plots
-  if (i %% 2 == 0 && i < length(all_pv)) {
-    par(mfrow = c(1, 2))
+all_pv <- NULL
+if (file.exists(existing_path)) {
+  reused <- tryCatch(readRDS(existing_path), error = function(e) NULL)
+  if (!is.null(reused) && inherits(reused, "Seurat") && ncol(reused) == 9947L && nrow(reused) == 6811L) {
+    cell_suffix <- sub("^([0-9]{3})_.*$", "\\1", colnames(reused))
+    if (!anyNA(cell_suffix) && all(unique(cell_suffix) %in% run_suffixes)) {
+      reused_counts <- GetAssayData(reused, assay = "RNA", layer = "counts")
+      all_pv <- stats::setNames(
+        lapply(seq_along(samples), function(i) {
+          suf <- run_suffixes[[i]]
+          cells_i <- colnames(reused)[cell_suffix == suf]
+          if (length(cells_i) == 0) {
+            # This run's cells may already all be present (post-subset
+            # objects only ever shrink, never gain runs), so an empty
+            # per-run slice here is unexpected - fall back rather than
+            # silently building a run with zero cells.
+            return(NULL)
+          }
+          mat_i <- reused_counts[, cells_i, drop = FALSE]
+          colnames(mat_i) <- sub(paste0("^", suf, "_"), "", cells_i)
+          CreateSeuratObject(counts = mat_i, min.cells = 0, min.features = 0)
+        }),
+        samples
+      )
+      if (any(vapply(all_pv, is.null, logical(1)))) all_pv <- NULL
+    }
   }
 }
-
-dev.off()
-
-rm(bcrank, uniq)
-
-# Another option is to use the emptyDrops.
-# emptyDrops performs Monte Carlo simulations to compute p-values, so we need to
-# set the seed to obtain reproducible results.
-# see PMID: 30902100 for  rationale and statistical framework underlying this
-# method
-# set.seed(123456)
-# all_pv <- lapply(all_pv, function(x) {
-#   e.out <- emptyDrops(x, lower = 40) #change this value if needed
-#   x <- x[, which(e.out$FDR <= 0.001)]
-# })
-
-##### --------------------------------------------------------------------------
-##### 5. Processing step 2: conversion of dgCMatrix to a Seurat object
-##### --------------------------------------------------------------------------
-# There are various tools
-# available to process and analyze single-cell RNA-seq data. The Seurat suite
-# https://satijalab.org/seurat/ is one of the most popular thanks to its regular
-# updates, its ease of use, and streamlined data handling and processing
-# commands. In what follows, we will follow the standard steps for handling,
-# processing, visualizing, and comparing data in the Seurat suite
-# (https://satijalab.org/seurat/articles/pbmc3k_tutorial).
-
-# Let's now transform the data in to a Seurat object.
-
-for (i in 1:length(all_pv)) {
-  sce <- all_pv[[i]]
-  mat <- counts(sce)
-  all_pv[[i]] <- CreateSeuratObject(
-    counts = mat,
-    min.cells = 0,
-    min.features = 0
-  )
+if (!is.null(all_pv)) {
+  message(sprintf(
+    "ruberto2022_2: reused expression counts from existing %s (STARsolo re-read skipped); recomputing metadata from current script logic only.",
+    existing_path
+  ))
 }
 
-# Note the use of the min.cells and min.features aruguments in the
-# CreateSeuratObject function. What do these arguments do?
-# In the console run '?CreateSeuratObject' to access the description of the
-# function and its arugments.
-# After transforming the data, check out the dimensions of the new Seurat object.
-# How has the noumber of cells and the number of features changed?
+if (is.null(all_pv)) {
+  message("ruberto2022_2: no reusable prior ruberto2022_2.rds found - running full STARsolo reprocessing (slow path).")
+  library(DropletUtils)
+  library(rtracklayer)
+  library(scater)
+  library(SingleCellExperiment)
+
+  pv.gff <- import.gff3("./scripts/ref/PlasmoDB-68_PvivaxP01.gff")
+  pv.gff <- as.data.frame(pv.gff)
+  rRNA_pv <- pv.gff %>%
+    as_tibble() %>%
+    filter(type == "rRNA") %>%
+    select(ID, description) %>%
+    mutate(ID = gsub("\\.1", "", ID))
+
+  all_pv <- list()
+  for (sample_id in samples) {
+    path <- file.path(paste0("./counts/", study_num, "/", sample_id, "_solo_out/Solo.out/GeneFull/raw"))
+    sce <- read10xCounts(path, col.names = TRUE)
+    all_pv[[sample_id]] <- sce
+  }
+
+  for (i in 1:length(all_pv)) {
+    all_pv[[i]] <- all_pv[[i]][!rownames(all_pv[[i]]) %in% rRNA_pv$ID, ]
+  }
+
+  pdf(paste0(study_num, "_knee_plots.pdf"), width = 12, height = 6)
+  par(mfrow = c(1, 2))
+  bcrank <- list()
+  uniq <- list()
+  for (i in seq_along(all_pv)) {
+    bcrank[[i]] <- barcodeRanks(all_pv[[i]])
+    uniq[[i]] <- !duplicated(bcrank[[i]]$rank)
+    plot(
+      bcrank[[i]]$rank[uniq[[i]]], bcrank[[i]]$total[uniq[[i]]],
+      log = "xy", xlab = "Rank", ylab = "Total UMI Count", cex.lab = 1.2,
+      main = names(all_pv)[i]
+    )
+    abline(h = metadata(bcrank[[i]])$inflection, col = "darkgreen", lty = 2)
+    abline(h = metadata(bcrank[[i]])$knee, col = "dodgerblue", lty = 2)
+    legend("bottomleft", legend = c("Inflection", "Knee"), col = c("darkgreen", "dodgerblue"), lty = 2, cex = 1.2)
+    if (i %% 2 == 0 && i < length(all_pv)) par(mfrow = c(1, 2))
+  }
+  dev.off()
+  rm(bcrank, uniq)
+
+  # set.seed(123456)
+  # all_pv <- lapply(all_pv, function(x) {
+  #   e.out <- emptyDrops(x, lower = 40) #change this value if needed
+  #   x <- x[, which(e.out$FDR <= 0.001)]
+  # })
+
+  for (i in 1:length(all_pv)) {
+    sce <- all_pv[[i]]
+    mat <- counts(sce)
+    all_pv[[i]] <- CreateSeuratObject(counts = mat, min.cells = 0, min.features = 0)
+  }
+}
 
 # Add metadata via explicit per-run vectors, each keyed 1:1 to the three
 # ERR runs/isolates - fixes D040-D043,D069.
@@ -341,6 +292,19 @@ pv.combined.all <- subset(pv.combined.all, cells = cells_to_subset$cells)
 # downstream by an incompatible blood-stage classifier (see singleR.R).
 pv.combined.all$source_life_cycle_stage <- "Sporozoite"
 pv.combined.all$source_stage_provenance <- "source_selection_defined"
+
+# Explicit count provenance (Phase 2 spec Part I.4).
+# QC UMI fields required by singleR.R's IDC eligibility gate (Part IV) -
+# must be populated for every study, not only Ruberto2022_1.
+pv.combined.all <- set_qc_umi_fields(pv.combined.all)
+
+pv.combined.all <- set_count_provenance(
+  pv.combined.all,
+  source_of_counts = "plavisca_starsolo_raw_umi",
+  counting_pipeline = "STARsolo",
+  count_reference_version = "PlasmoDB-68_PvivaxP01",
+  count_provenance_status = "plavisca_production_pipeline"
+)
 
 # Conservative Phase 1 membership policy: preserve the exact 9,947-cell
 # population; do not modify counts or membership.

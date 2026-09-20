@@ -31,7 +31,7 @@ source("scripts/pipeline_lib.R")
 table_s2 <- readxl::read_xls("data/TableS2_Cell_Metadata.xls", skip = 1) |>
   mutate(
     refine_state = case_when(
-      State == "Replicative" ~ "Schizont (liver stage)",
+      State == "Replicative" ~ "Schizont (Liver stage)", # Phase 2 fix: capital L to match HARMONIZED_TO_BROAD_STAGE (pipeline_lib.R)
       TRUE ~ State
     )
   )
@@ -157,6 +157,26 @@ silva$source_stage_provenance <- ifelse(
 # Add barcode column for consistency with other studies (kept distinct from
 # the raw reconstructed_barcode - see metadata_schema.tsv)
 silva$barcode <- colnames(silva)
+
+# Explicit count provenance (Phase 2 spec Part I.4). Unlike the STARsolo-
+# derived studies, this study's counts come directly from the authors'
+# Zenodo-deposited processed object (PvData_CHM_Final.RDS) - MD5-confirmed
+# byte-identical to the record 6280956 deposit (audit/mancio_silva2022/
+# AUDIT.md "Evidence and identity"). The authors' own upstream
+# read-alignment/counting tool and reference version are not documented in
+# their deposit or publication methods available to this audit, so those
+# two fields are recorded as explicitly undocumented rather than guessed.
+# QC UMI fields required by singleR.R's IDC eligibility gate (Part IV) -
+# must be populated for every study, not only Ruberto2022_1.
+silva <- set_qc_umi_fields(silva)
+
+silva <- set_count_provenance(
+  silva,
+  source_of_counts = "author_processed_object_raw_umi",
+  counting_pipeline = "author_upstream_pipeline_undocumented",
+  count_reference_version = "author_reference_undocumented",
+  count_provenance_status = "confirmed_byte_identical_to_zenodo_deposit_md5"
+)
 
 # Conservative Phase 1 membership policy: preserve all 1494 cells, including
 # the 14 proven .1 duplicates and both members of the unresolved D5 pair.

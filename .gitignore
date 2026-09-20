@@ -1,5 +1,6 @@
 # Intermediate Seurat objects (large binaries — not version-controlled)
 *.rds
+*.RDS
 
 # Raw count matrices (STARsolo output — very large)
 counts/
@@ -12,6 +13,7 @@ data/*.rds
 data/*.xls
 data/*.xlsx
 data/*.txt
+data/*.csv
 
 # Pixi environment cache
 scripts/.pixi/
@@ -25,3 +27,9 @@ scripts/pixi.lock
 # OS files
 .DS_Store
 Thumbs.db
+
+# Personal Claude Code permission overrides (not shared with the team)
+.claude/settings.local.json
+
+# Stray default R plotting device output
+Rplots.pdf

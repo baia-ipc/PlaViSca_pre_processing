@@ -260,3 +260,72 @@ atlas rebuild**, in the sense that the scientific inclusion decision
 the affected 538 cells' expression values can be trusted in any
 expression-dependent downstream analysis. It is no longer an open technical
 question; it is a scientific/policy question.
+
+---
+
+## PHASE 2 UPDATE (2026-09-20): project-lead sign-off and formal decision
+
+The Phase-2 project lead has now made the scientific decision required by
+the "Remaining Phase-2 blocker status" section above, on the basis of the
+independent `audit/ruberto2022_1/author_matrix_validation/` study (commit
+`c477913`), which supersedes the weaker "possible alternative" ranking of
+option (b) given in Part 10 above.
+
+**Decision:** Use the complete author-derived raw UMI matrix
+(`data/Hep59.1.2.seu_20aug2025.rds`, `RNA` assay `counts` layer) as the
+canonical expression source for **all 1,438** Ruberto2022_1 cells - not only
+the 538 previously near-empty (D036-affected) cells. Do not mix author
+counts with STARsolo counts within the study, and do not exclude the 538
+D036 cells.
+
+**Why (consolidated):**
+
+1. Public FASTQ/STARsolo reconstruction is not reproducible for the 538
+   cells (this document, Sections above).
+2. Independent kallisto/bustools reprocessing, using the authors' own
+   successful methodology on the same local FASTQ, did not rescue them
+   either - the defect is upstream of alignment method (library/deposit
+   level), so no further reprocessing is expected to help.
+3. The author `RNA` counts layer is confirmed non-negative integer raw UMI
+   counts (`author_matrix_validation/rna_counts_validation.tsv`:
+   `noninteger_nonzero_entries: 0`, `SCT_assay_present: FALSE`).
+4. The 1,438-cell crosswalk (`51inf->612, 52inf->610, 91inf->611,
+   92inf->609`) is exact and one-to-one, with zero unmapped or duplicated
+   IDs (`author_matrix_validation/cell_crosswalk_validation.tsv`).
+5. The 900 unaffected cells show strong positive expression/cell-identity
+   concordance between the author matrix and PlaViSca's own STARsolo
+   reconstruction (`cell_identity_test.tsv`: true-counterpart rank-1 match
+   85-100% depending on run, versus a 0.16-0.39% chance rate) - this
+   supports that, for the unaffected population, the author matrix
+   measures the same biological cells PlaViSca's pipeline measures, not a
+   relabeled or different population, which in turn supports trusting the
+   author matrix for the 538 cells where PlaViSca has no signal to compare
+   against.
+6. All 4,722 author PVP01 gene IDs map exactly and unambiguously into
+   PlaViSca's 6,811-feature panel (`author_gene_mapping.tsv`: 4722/4722
+   `exact_string_match`, 0 ambiguous/unmapped/duplicate).
+
+**What this decision does NOT resolve** (explicit residual caveat, carried
+forward unchanged): byte-level identity of the locally dated object
+(`Hep59.1.2.seu_20aug2025.rds`) to the canonical Zenodo-deposited RDS
+remains unconfirmed. This is a provenance-completeness limitation, not a
+reason to distrust the validated counts - it is recorded per-cell via the
+new `count_provenance_status` field rather than silently dropped. The
+public-data discrepancy characterized in `audit/ruberto2022_1/AUDIT.md` is
+**not** being called "fixed" by reprocessing; it remains an unreproducible
+public-deposit defect. It is resolved *operationally*, for the purpose of
+building the Phase-2 atlas, by adopting the independently validated author
+matrix as this study's expression source, with explicit, auditable
+provenance carried at cell/study metadata level.
+
+**Implementation:** `scripts/ruberto2022_1_pv_analysis_script.R` is updated
+to read `RNA` counts from `data/Hep59.1.2.seu_20aug2025.rds` for all 1,438
+cells (after the existing crosswalk-based subset/rename), zero-fill only
+the PlaViSca features classified `not_part_of_author_reference` in
+`audit/ruberto2022_1/phase2_feature_coverage.tsv` (never interpreting
+reference-absent genes as unconditional biological zero without that
+evidence trail), and populate `source_of_counts`, `counting_pipeline`,
+`count_reference_version`, `count_provenance_status` for every cell. D036
+is closed as a Phase-2 blocker; `near_empty_expression_flag`/
+`total_umi_count` are retained as historical/diagnostic fields describing
+the now-superseded STARsolo reconstruction, not the adopted counts.

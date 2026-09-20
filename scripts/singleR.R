@@ -208,7 +208,14 @@ pv.combined.all$idc_heuristic_stage_bin <- case_when(
   is.na(idc_hour_numeric) ~ NA_character_,
   idc_hour_numeric >= 0 & idc_hour_numeric < 18 ~ "Ring",
   idc_hour_numeric >= 18 & idc_hour_numeric < 30 ~ "Trophozoite",
-  idc_hour_numeric >= 30 & idc_hour_numeric < 46 ~ "Schizont",
+  # Phase 2 fix: this heuristic bin feeds directly into
+  # harmonized_life_cycle_stage (Part 5a below), which must use the
+  # blood/liver-disambiguated vocabulary in HARMONIZED_TO_BROAD_STAGE
+  # (pipeline_lib.R) - a bare "Schizont" is not a key in that table and
+  # would crash map_broad_stage() the first time a cell actually lands in
+  # this bin (never previously exercised end-to-end before the Phase 2
+  # atlas rebuild).
+  idc_hour_numeric >= 30 & idc_hour_numeric < 46 ~ "Schizont (Blood stage)",
   idc_hour_numeric >= 46 & idc_hour_numeric <= 48 ~ "Merozoite",
   TRUE ~ NA_character_
 )
@@ -553,9 +560,23 @@ if (any(!is.na(pv.combined.all$idc_reference_similarity_label[near_zero])) ||
   pipeline_fail("AT11 regression: a near-zero-expression cell received idc_reference_similarity_label or pred_gametocyte_sex")
 }
 
-expected_broad <- map_broad_stage(pv.combined.all$harmonized_life_cycle_stage)
-if (!identical(expected_broad, pv.combined.all$parasite_broad_stage)) {
-  pipeline_fail("AT21 regression: parasite_broad_stage no longer matches the deterministic mapping of harmonized_life_cycle_stage")
+expected_broad <- unname(map_broad_stage(pv.combined.all$harmonized_life_cycle_stage))
+actual_broad <- unname(pv.combined.all$parasite_broad_stage)
+# Value-wise comparison (not identical()): subset() can change attributes
+# such as names/factor-vs-character on metadata columns without changing
+# the underlying per-cell values - a false-positive-prone identical()
+# check here would fail-loud on a purely cosmetic difference. NA must
+# align position-for-position on both sides; every non-NA pair must be
+# equal.
+mismatch <- !(
+  (is.na(expected_broad) & is.na(actual_broad)) |
+    (!is.na(expected_broad) & !is.na(actual_broad) & expected_broad == actual_broad)
+)
+if (any(mismatch)) {
+  pipeline_fail(sprintf(
+    "AT21 regression: parasite_broad_stage no longer matches the deterministic mapping of harmonized_life_cycle_stage (%d cell(s) mismatched)",
+    sum(mismatch)
+  ))
 }
 
 # ============================================================================

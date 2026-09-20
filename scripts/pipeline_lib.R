@@ -11,6 +11,55 @@
 suppressPackageStartupMessages(library(dplyr))
 
 # ---------------------------------------------------------------------------
+# Environment defect workaround (Phase 2): rtracklayer's internal
+# .parseSpeciesAsMetadata() has an upstream bug where a failed NCBI organism
+# lookup returns NULL (via `warning()`, which itself returns NULL) instead
+# of list(), which then crashes `metadata<-()` downstream in
+# import.gff3(). This always triggers for PlasmoDB's GFF files, whose
+# "##species http://.../wwwtax.cgi?id=9000000036" pragma uses a
+# PlasmoDB-internal synthetic taxID that is never a real, resolvable NCBI
+# taxonomy ID - so every import.gff3() call on scripts/ref/*.gff hits this
+# path regardless of network availability. This patch only fixes the
+# failure-path return value (list() instead of NULL); it does not change
+# behavior when a species lookup succeeds. Applied once, here, so every
+# per-study script that sources this file (all of which call import.gff3())
+# is covered without a per-script workaround.
+if (requireNamespace("rtracklayer", quietly = TRUE)) {
+  tryCatch(
+    {
+      ns <- asNamespace("rtracklayer")
+      if (exists(".parseSpeciesAsMetadata", envir = ns, inherits = FALSE)) {
+        patched_parseSpeciesAsMetadata <- function(lines) {
+          species <- unique(grep("##species", lines, fixed = TRUE, value = TRUE))
+          if (length(species) > 1L) stop("multiple species definitions found")
+          metadata <- list()
+          if (length(species) == 1L) {
+            species <- sub("##species ", "", species, fixed = TRUE)
+            if (get("isNCBISpeciesURL", envir = ns)(species)) {
+              metadata <- tryCatch(
+                get("metadataFromNCBI", envir = ns)(species),
+                error = function(e) {
+                  warning("failed to retrieve organism information from NCBI - continuing without species metadata")
+                  list()
+                }
+              )
+            }
+          }
+          metadata
+        }
+        environment(patched_parseSpeciesAsMetadata) <- ns
+        unlockBinding(".parseSpeciesAsMetadata", ns)
+        assign(".parseSpeciesAsMetadata", patched_parseSpeciesAsMetadata, envir = ns)
+        lockBinding(".parseSpeciesAsMetadata", ns)
+      }
+    },
+    error = function(e) {
+      message("Note: could not apply rtracklayer .parseSpeciesAsMetadata workaround: ", conditionMessage(e))
+    }
+  )
+}
+
+# ---------------------------------------------------------------------------
 # Controlled vocabularies (fixes D007/D056: one canonical string per study,
 # never re-typed per script)
 # ---------------------------------------------------------------------------
@@ -255,6 +304,44 @@ apply_keyed_run_metadata <- function(seurat_list, run_table, fields) {
     }
   }
   seurat_list
+}
+
+# ---------------------------------------------------------------------------
+# Count provenance (Phase 2 Part I.4): every study must carry explicit,
+# controlled-vocabulary provenance for its expression counts, not just
+# Ruberto2022_1. Values are assigned once here so all six per-study scripts
+# use the same field names/semantics.
+# ---------------------------------------------------------------------------
+
+#' Set the four count-provenance metadata fields on a Seurat object (applies
+#' the same value to every current cell - call once per study object, after
+#' cells are finalized, before saveRDS()).
+set_count_provenance <- function(seurat_obj, source_of_counts, counting_pipeline,
+                                  count_reference_version, count_provenance_status) {
+  n_cells <- ncol(seurat_obj)
+  # Direct @meta.data assignment (not `$<-`/`[[<-`), which is markedly
+  # faster than Seurat's S4 setter path at tens-of-thousands-of-cells scale.
+  seurat_obj@meta.data$source_of_counts <- rep(source_of_counts, n_cells)
+  seurat_obj@meta.data$counting_pipeline <- rep(counting_pipeline, n_cells)
+  seurat_obj@meta.data$count_reference_version <- rep(count_reference_version, n_cells)
+  seurat_obj@meta.data$count_provenance_status <- rep(count_provenance_status, n_cells)
+  seurat_obj
+}
+
+#' Set total_umi_count/near_empty_expression_flag from the adopted RNA
+#' counts layer. singleR.R's IDC eligibility gate (Part 1) requires
+#' total_umi_count to be present and non-NA for every cell in the merged
+#' atlas, not just Ruberto2022_1 - every per-study script must call this
+#' before saveRDS() so the field is never silently NA (and therefore
+#' silently FALSE-like in a `>=` comparison) for the other five studies.
+#' Assigns directly via @meta.data (bypasses the Seurat `$<-`/`[[<-` S4
+#' dispatch path, which has been observed to be slow at tens-of-thousands-
+#' of-cells scale) for speed on the largest studies.
+set_qc_umi_fields <- function(seurat_obj, assay = "RNA", layer = "counts") {
+  total_umi <- Matrix::colSums(SeuratObject::GetAssayData(seurat_obj, assay = assay, layer = layer))
+  seurat_obj@meta.data$total_umi_count <- unname(total_umi[colnames(seurat_obj)])
+  seurat_obj@meta.data$near_empty_expression_flag <- seurat_obj@meta.data$total_umi_count <= 1
+  seurat_obj
 }
 
 # ---------------------------------------------------------------------------

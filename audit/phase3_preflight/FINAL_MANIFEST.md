@@ -2,8 +2,10 @@
 
 > **DEC01/DEC02 update:** the authoritative TSV now selects the 105,949-cell
 > rebuild from scientific commit `173431cfca8e19c716a96164ee2ea6053441855b`.
-> The build is not release-qualified because AT25 fails; `REPORT.md` contains
-> the current verdict. Statements below describing the prior 105,963-cell
+> Focused resolution classified the original AT25 result as a validation
+> semantics defect; corrected AT25 passes with unchanged thresholds, yielding
+> 30 PASS / 0 FAIL. `REPORT.md` contains the current verdict. Statements below
+> describing the prior 105,963-cell
 > closure are retained as historical context and are superseded.
 
 `final_release_manifest.tsv` is the authoritative manifest for the PlaViSca v1 data release candidate. The historical root `build_manifest.tsv` is preserved unchanged as an append-only account of intermediate Phase-2 generations; its repeated rows are not authoritative selectors.

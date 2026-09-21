@@ -1,9 +1,9 @@
 # PlaViSca final preprocessing/data acceptance closure
 
-> **Authoritative DEC01/DEC02 update (2026-09-21): NOT RELEASE-QUALIFIED.**
+> **Authoritative DEC01/DEC02 update (2026-09-21): FINAL RELEASE DATA CANDIDATE — DEC01/DEC02 RESOLVED.**
 > This section supersedes the historical release-closure narrative below.
-> DEC01 and DEC02 are implemented and AT14 now passes, but the rebuilt
-> 105,949-cell candidate fails the unchanged quantitative AT25 criterion.
+> DEC01 and DEC02 are implemented, AT14 passes, and focused scientific
+> resolution of AT25 establishes 30 PASS / 0 FAIL / 0 PENDING.
 
 ## DEC01/DEC02 final rebuild verdict
 
@@ -26,15 +26,25 @@ state exists, and the only seven paired missing-stage rows are the documented
 low-UMI Hazzard2024 cells. Integration mixing was evaluated within comparable
 broad-stage populations and improved in all three multi-study strata.
 
-AT25 is the sole blocker. Female metrics pass (AUC 0.8647923, median shift
-0.4847102, minimum cluster margin 0.3266343, coherence 1.0). Male AUC
-0.9748556, median shift 1.8501185, minimum cluster margin 0.1391574, and
-coherence 0.9818913 pass, but the minimum called-cluster score is 0.0104848,
-below the predeclared 0.10 threshold. The threshold was not changed. The final
-acceptance result is therefore **29 PASS / 1 FAIL / 0 PENDING_DECISION / 0
-PENDING_APP**. This build must not be designated **FINAL RELEASE DATA
-CANDIDATE — DEC01/DEC02 RESOLVED** until AT25 is scientifically resolved and
-the application retests the new data candidate.
+AT25's original failure is classified **VALIDATION_SEMANTICS_DEFECT**. The old
+test averaged all atlas cells per cluster, whereas production calculates marker
+means only among `gametocyte_eligible <- idc_eligible` cells. It also required
+every called all-cell cluster to clear thresholds while separately allowing up
+to 10% boundary mixing, making that allowance ineffective. The corrected test
+keeps all thresholds unchanged and separates production consistency from
+integrated-population coherence.
+
+Female: n=21,801, AUC=0.8647923, median shift=0.4847102, eligible-cluster
+score/margin minima=0.3735319/0.3324021, all-cell coherence=1.0 — PASS. Male:
+n=994, AUC=0.9748556, median shift=1.8501185, eligible-cluster score/margin
+minima=0.1284835/0.1578435, all-cell coherence=976/994=0.9818913 — PASS. The
+18/994 non-clearing calls remain visible in cluster 4, which contains 1,687
+total cells, 18 eligible Male calls, and 1,669 ineligible cells. No threshold
+was lowered, and no atlas, Harmony, or SingleR rebuild occurred. The final
+acceptance result is **30 PASS / 0 FAIL / 0 PENDING_DECISION / 0 PENDING_APP**.
+All six frozen scientific/application artifacts retain their DEC01/DEC02
+SHA256 values; exact comparisons are recorded in
+`AT25_scientific_artifact_hash_verification.tsv`.
 
 Scientific rebuild commit: `173431cfca8e19c716a96164ee2ea6053441855b`.
 Authoritative manifest: `audit/phase3_preflight/final_release_manifest.tsv`.

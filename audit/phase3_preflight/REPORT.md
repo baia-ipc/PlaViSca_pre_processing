@@ -1,5 +1,46 @@
 # PlaViSca final preprocessing/data acceptance closure
 
+> **Authoritative DEC01/DEC02 update (2026-09-21): NOT RELEASE-QUALIFIED.**
+> This section supersedes the historical release-closure narrative below.
+> DEC01 and DEC02 are implemented and AT14 now passes, but the rebuilt
+> 105,949-cell candidate fails the unchanged quantitative AT25 criterion.
+
+## DEC01/DEC02 final rebuild verdict
+
+The six study objects and every membership-dependent downstream analysis were
+rebuilt from the validated count artifacts without FASTQ/alignment/count
+reprocessing. Mancio-Silva2022 now contains 1,480 cells; the other study counts
+remain 9,766 (Sa2020), 3,294 (Hazzard2022), 80,024 (Hazzard2024), 1,438
+(Ruberto2022_1), and 9,947 (Ruberto2022_2), for 105,949 total cells. The common
+integration universe remains 5,203 features.
+
+DEC01 removes exactly the 14 proven `.1` representations listed in
+`audit/mancio_silva2022/dec01_removed_duplicate_cells.tsv`; every unsuffixed
+source counterpart remains. DEC02 retains `D5Seq1_CCCCGATTGACG` and
+`D5Seq2_CCCCGATTGACG`, whose distinct source samples (`SEQ5r1`, `SEQ5r2`) and
+run sets remain recorded, without a D5 duplicate/suspicion flag. AT14 passes.
+
+Annotation validation passes: 90,219 cells are IDC-eligible/labeled, 22,795
+cells have gametocyte calls, no non-blood IDC label or impossible lifecycle
+state exists, and the only seven paired missing-stage rows are the documented
+low-UMI Hazzard2024 cells. Integration mixing was evaluated within comparable
+broad-stage populations and improved in all three multi-study strata.
+
+AT25 is the sole blocker. Female metrics pass (AUC 0.8647923, median shift
+0.4847102, minimum cluster margin 0.3266343, coherence 1.0). Male AUC
+0.9748556, median shift 1.8501185, minimum cluster margin 0.1391574, and
+coherence 0.9818913 pass, but the minimum called-cluster score is 0.0104848,
+below the predeclared 0.10 threshold. The threshold was not changed. The final
+acceptance result is therefore **29 PASS / 1 FAIL / 0 PENDING_DECISION / 0
+PENDING_APP**. This build must not be designated **FINAL RELEASE DATA
+CANDIDATE — DEC01/DEC02 RESOLVED** until AT25 is scientifically resolved and
+the application retests the new data candidate.
+
+Scientific rebuild commit: `173431cfca8e19c716a96164ee2ea6053441855b`.
+Authoritative manifest: `audit/phase3_preflight/final_release_manifest.tsv`.
+
+## Historical release-closure report (superseded)
+
 ## Verdict
 
 The preprocessing/data candidate is now **FINAL RELEASE DATA CANDIDATE**. All 29 technically actionable AT01–AT30 criteria pass. AT14 alone remains `PENDING_DECISION` because DEC01/DEC02 still lack explicit project-lead approval; no cell membership was changed to force closure. There are zero FAIL and zero PENDING_APP results.

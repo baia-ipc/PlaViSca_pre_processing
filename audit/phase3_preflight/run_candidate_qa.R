@@ -136,17 +136,21 @@ candidate_pairs <- unique(meta[c("study_label", "study_pmid")])
 candidate_pairs$study_pmid <- as.character(candidate_pairs$study_pmid)
 label_col <- if ("study_label" %in% names(bib)) "study_label" else names(bib)[grepl("study.*label", names(bib))][1]
 pmid_col <- if ("study_pmid" %in% names(bib)) "study_pmid" else names(bib)[grepl("pmid", names(bib))][1]
+count_col <- if ("number_of_cells" %in% names(bib)) "number_of_cells" else names(bib)[grepl("number.*cell", names(bib))][1]
 bib_has_pmid <- length(pmid_col) == 1L && !is.na(pmid_col) && nzchar(pmid_col)
 bib_pairs <- unique(data.frame(study_label = bib[[label_col]],
-                               study_pmid = if (bib_has_pmid) as.character(bib[[pmid_col]]) else NA_character_))
+                               study_pmid = if (bib_has_pmid) as.character(bib[[pmid_col]]) else NA_character_,
+                               number_of_cells = as.integer(bib[[count_col]])))
 all_labels <- union(candidate_pairs$study_label, bib_pairs$study_label)
 bib_out <- do.call(rbind, lapply(all_labels, function(label) {
   crows <- candidate_pairs[candidate_pairs$study_label == label, , drop = FALSE]
   brows <- bib_pairs[bib_pairs$study_label == label, , drop = FALSE]
-  issue <- if (!nrow(crows)) "EXTRA_BIBLIOGRAPHY_ROW" else if (!nrow(brows)) "MISSING_BIBLIOGRAPHY_ROW" else if (nrow(crows) != 1L || nrow(brows) != 1L) "DUPLICATE_OR_AMBIGUOUS" else if (!bib_has_pmid) "LABEL_MATCH_PMID_NOT_IN_BIBLIOGRAPHY" else if (crows$study_pmid != brows$study_pmid) "PMID_MISMATCH" else "MATCH"
+  candidate_n <- sum(meta$study_label == label)
+  issue <- if (!nrow(crows)) "EXTRA_BIBLIOGRAPHY_ROW" else if (!nrow(brows)) "MISSING_BIBLIOGRAPHY_ROW" else if (nrow(crows) != 1L || nrow(brows) != 1L) "DUPLICATE_OR_AMBIGUOUS" else if (!bib_has_pmid) "LABEL_MATCH_PMID_NOT_IN_BIBLIOGRAPHY" else if (crows$study_pmid != brows$study_pmid) "PMID_MISMATCH" else if (candidate_n != brows$number_of_cells) "CELL_COUNT_MISMATCH" else "MATCH"
   data.frame(study_label = label,
              candidate_pmid = paste(unique(crows$study_pmid), collapse = ";"),
              bibliography_pmid = paste(unique(brows$study_pmid), collapse = ";"),
+             candidate_cells = candidate_n, bibliography_cells = brows$number_of_cells,
              candidate_rows = nrow(crows), bibliography_rows = nrow(brows), status = issue)
 }))
 write_tsv(bib_out, file.path(out_dir, "bibliography_contract.tsv"))

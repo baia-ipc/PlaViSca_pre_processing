@@ -13,7 +13,28 @@ library(scater)
 library(SingleCellExperiment)
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
+    )
+  }
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
 ##### 2. Load annotation files
@@ -180,59 +201,86 @@ for (i in 1:length(all_pv)) {
 # After transforming the data, check out the dimensions of the new Seurat object.
 # How has the noumber of cells and the number of features changed?
 
-# Add metadata. Note: the same will need to be done for the other samples that we analyze.
-study_pmid <- rep(study_num, length(all_pv))
-run_id <- rep(paste0("SRR27021", 980:987), length(all_pv))
-study_label <- rep("Hazzard2024", length(all_pv))
-num_srr <- rep(24, length(all_pv))
-pub_year <- rep(2024, length(all_pv))
-geographic_location <- rep("Papua New Guinea/El Salvador", length(all_pv))
-sc_technology <- rep("10x_Chomium_V3", length(all_pv))
-sequencer <- rep("Illumina NovaSeq 6000", length(all_pv))
-host_species <- rep("Saimiri boliviensis", length(all_pv))
-host_id <- c(
-    "5163_2",
-    "5163_1",
-    "5708_2",
-    "5550_1",
-    "5537_4",
-    "5537_3",
-    "5537_3",
-    "5537_1"
+# Add metadata via a keyed authoritative run table - never positional
+# vectors/rep() recycling (fixes D026-D030,D032,D033,D069; see
+# scripts/pipeline_lib.R and scripts/ref/hazzard2024_run_table.tsv, derived
+# from audit/hazzard2024/authoritative_run_table.tsv).
+source("scripts/pipeline_lib.R")
+
+run_table <- read.delim(
+  "scripts/ref/hazzard2024_run_table.tsv",
+  stringsAsFactors = FALSE
 )
 
-sample_type <- rep("Mammalian host: blood", length(all_pv))
+membership <- split_run_membership(all_pv, run_table)
 
-strain <- rep("NIH1993-F3&Chesson", length(all_pv))
-day_post_infection <- c(16, 14, 21, 17, 26, 24, 21, 16)
-treatment <- rep("No_Treatment", length(all_pv))
-biological_replicate <- rep(NA, length(all_pv))
+retained_fields <- c(
+  "library_id", "animal_id", "biological_replicate_id",
+  "biological_replicate_type", "day_post_infection", "infection_design",
+  "parasite_lineage_isolate", "per_cell_parasite_genotype",
+  "parasite_origin_location", "host_provenance", "experimental_site",
+  "sequencing_site", "registry_location", "host_species", "technology",
+  "sequencer_registered", "sequencer_protocol_publication", "host_sex",
+  "source_run_count_deposited", "source_run_count_imported",
+  "source_run_count_retained"
+)
 
+if (length(membership$retained) > 0) {
+  membership$retained <- apply_keyed_run_metadata(
+    membership$retained,
+    run_table,
+    retained_fields
+  )
+  for (rid in names(membership$retained)) {
+    n_cells <- ncol(membership$retained[[rid]])
+    membership$retained[[rid]]$sample_type <- rep("Host blood", n_cells)
+    membership$retained[[rid]]$tissue_or_sample_type <- rep("Host blood", n_cells) # Phase 2 fix: this field, not sample_type, is what singleR.R reads for IDC eligibility
+    membership$retained[[rid]]$retained_by_plavisca_qc <- rep(TRUE, n_cells)
+  }
+}
 
-for (i in 1:length(all_pv)) {
-    all_pv[[i]]$study_pmid <- paste0(study_pmid[[i]])
-    all_pv[[i]]$run_id <- paste0(run_id[[i]])
-    all_pv[[i]]$study_label <- paste0(study_label[[i]])
-    all_pv[[i]]$num_srr <- paste0(num_srr[[i]])
-    all_pv[[i]]$pub_year <- paste0(pub_year[[i]])
-    all_pv[[i]]$geographic_location <- paste0(geographic_location[[i]])
-    all_pv[[i]]$sc_technology <- paste0(sc_technology[[i]])
-    all_pv[[i]]$sequencer <- paste0(sequencer[[i]])
-    all_pv[[i]]$host_species <- paste0(host_species[[i]])
-    all_pv[[i]]$host_id <- paste0(host_id[[i]])
-    all_pv[[i]]$sample_type <- paste0(sample_type[[i]])
-    all_pv[[i]]$strain <- paste0(strain[[i]])
-    all_pv[[i]]$day_post_infection <- paste0(day_post_infection[[i]])
-    all_pv[[i]]$treatment <- paste0(treatment[[i]])
-    all_pv[[i]]$biological_replicate <- paste0(biological_replicate[[i]])
+# Runs imported for QC but not among the 24 authoritative retained blood
+# libraries (see scripts/hazzard2024_merge_all.R's explicit subset() against
+# data/Proccessed_Data.txt) never survive to the saved study object; assign
+# explicit NA placeholders rather than any authoritative value, since none of
+# the corrected fields above are established for a population never retained.
+for (rid in names(membership$pending_filter)) {
+  n_cells <- ncol(membership$pending_filter[[rid]])
+  for (f in retained_fields) {
+    membership$pending_filter[[rid]][[f]] <- rep(NA, n_cells)
+  }
+  membership$pending_filter[[rid]]$sample_type <- rep(NA_character_, n_cells)
+  membership$pending_filter[[rid]]$tissue_or_sample_type <- rep(NA_character_, n_cells)
+  membership$pending_filter[[rid]]$retained_by_plavisca_qc <- rep(FALSE, n_cells)
+}
 
-    all_pv[[i]]$barcode <- paste(
-        str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
-        "_",
-        colnames(all_pv[[i]]),
-        sep = ""
-    )
-    colnames(all_pv[[i]]) <- all_pv[[i]]$barcode
+all_pv <- c(membership$retained, membership$pending_filter)[names(all_pv)]
+
+for (i in seq_along(all_pv)) {
+  n_cells <- ncol(all_pv[[i]])
+  assert_cardinality(colnames(all_pv[[i]]), n_cells, label = paste0("colnames(", names(all_pv)[i], ")"))
+
+  all_pv[[i]]$study_pmid <- rep(study_num, n_cells)
+  all_pv[[i]]$run_id <- rep(names(all_pv)[i], n_cells)
+  all_pv[[i]]$study_label <- rep(STUDY_LABELS[["hazzard2024"]], n_cells)
+  all_pv[[i]]$pub_year <- rep(2024L, n_cells)
+  all_pv[[i]]$sc_technology <- all_pv[[i]]$technology
+  all_pv[[i]]$sequencer <- all_pv[[i]]$sequencer_registered
+  # No drug-treatment arm exists in this study (infection design - mono/
+  # consecutive/simultaneous/sporozoite - is a separate covariate carried in
+  # infection_design, not a treatment arm); "No_Treatment" is the genuinely
+  # correct value here, never a literal "NA" string.
+  all_pv[[i]]$treatment <- rep("No_Treatment", n_cells)
+  all_pv[[i]]$source_treatment <- rep(NA_character_, n_cells)
+  all_pv[[i]]$host_id <- all_pv[[i]]$library_id
+
+  all_pv[[i]]$barcode <- paste(
+    str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
+    "_",
+    colnames(all_pv[[i]]),
+    sep = ""
+  )
+  colnames(all_pv[[i]]) <- all_pv[[i]]$barcode
 }
 
 ##### --------------------------------------------------------------------------

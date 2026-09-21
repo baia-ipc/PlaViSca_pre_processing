@@ -49,7 +49,7 @@ Supporting utilities:
 | Ruberto2022_2 | [35926062](https://pubmed.ncbi.nlm.nih.gov/35926062/) | PLoS Negl Trop Dis | 9 947 | Salivary gland (vector host) |
 | Hazzard2022 | [36525464](https://pubmed.ncbi.nlm.nih.gov/36525464/) | PLoS Negl Trop Dis | 3 294 | Blood & salivary gland |
 | Hazzard2024 | [39223117](https://pubmed.ncbi.nlm.nih.gov/39223117/) | Nat Commun | 80 024 | Blood (mammalian host) |
-| Mancio-Silva2022 | [39223117](https://pubmed.ncbi.nlm.nih.gov/39223117/) | Cell Host & Microbe | 1 494 | Hepatocytes (human) |
+| Mancio-Silva2022 | [35443155](https://pubmed.ncbi.nlm.nih.gov/35443155/) | Cell Host & Microbe | 1 480 | Hepatocytes (human) |
 
 ---
 

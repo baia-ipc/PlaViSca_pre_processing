@@ -1,325 +1,283 @@
 ##### --------------------------------------------------------------------------
 ##### -Ruberto, CTEGD, Institute of Bioinformatics, UGA
 ##### --------------------------------------------------------------------------
+#####
+##### PHASE 2 (2026-09-20): this study's expression source is now the
+##### author-derived raw UMI matrix (data/Hep59.1.2.seu_20aug2025.rds), not
+##### PlaViSca's own STARsolo reconstruction - see
+##### audit/ruberto2022_1/D036_resolution.md "PHASE 2 UPDATE" and
+##### audit/shared_pipeline/decision_register.tsv DEC09 2026-09-20 UPDATE.
+#####
+##### This script therefore no longer reads counts/36093191/*_solo_out/ at
+##### all: cell membership (the exact 1,438 cells), per-run metadata, and
+##### expression counts are all derivable without touching the STARsolo raw
+##### barcode space (millions of candidate barcodes) that the pre-Phase-2
+##### version of this script loaded solely to build an object it then threw
+##### 99.9% of away. The only STARsolo-derived information retained is a
+##### historical/diagnostic comparison (legacy_starsolo_total_umi_count/
+##### legacy_starsolo_near_empty_flag), reused directly from this study's
+##### existing Phase-1 output object rather than recomputed from raw counts.
+##### --------------------------------------------------------------------------
 
 ##### --------------------------------------------------------------------------
 ##### 1. Load libraries
 ##### --------------------------------------------------------------------------
-library(DropletUtils)
 library(tidyverse)
-library(rtracklayer)
 library(Seurat)
-library(scater)
-library(SingleCellExperiment)
 
 # set current working directory
-setwd("/home/sopheap/pvsca_b/pre_process_data")
-
-##### --------------------------------------------------------------------------
-##### 2. Load annotation files
-##### --------------------------------------------------------------------------
-# Before beginning the data processing steps, let's upload the PvP01 gene
-# annotation file. This will come in handy when we perform differential gene
-# expression analyses and for the generation of the data tables.
-
-pv.gff <- import.gff3("./scripts/ref/PlasmoDB-68_PvivaxP01.gff")
-pv.gff <- as.data.frame(pv.gff)
-gene.info <- pv.gff %>%
-  mutate(seurat = gsub("_", "-", ID)) %>%
-  filter(type == "protein_coding_gene")
-
-gene.info <- as.data.frame(gene.info)
-gene.info$GeneDescription <- paste(
-  gene.info$ID,
-  gene.info$description,
-  sep = "::"
-)
-
-rRNA_pv <- pv.gff %>%
-  as_tibble() %>%
-  filter(type == "rRNA") %>%
-  select(ID, description) %>%
-  mutate(ID = gsub("\\.1", "", ID))
-
-##### --------------------------------------------------------------------------
-##### 3. Load scRNAseq data in to R
-##### --------------------------------------------------------------------------
-# Great, we will now  upload the aligned data to R. We will use the data from
-# Sa et al. as an example, PMID:32365102. This dataset contains 10 single-cell
-# RNAs-seq datasets from P. vivax parasites.
-# Choose one or more of these single-cell RNA-seq datasets for processing.
-# For the data that you choose to analyze, simply unhash the sample
-# corresponding to the the one that you choose. Be sure to also change the
-# path of the read_count_input() function so that it matches the location on your
-# system
-
-# For the sample(s) that you choose, please provide information linked to how
-# the sample(s) were processed. Simply go to https://www.ncbi.nlm.nih.gov/sra,
-# type in the SRR accession number and you will find this information.
-
-study_num <- "36093191"
-samples <- paste0("SRR19573", 609:612)
-
-all_pv <- list()
-
-for (sample_id in samples) {
-  path <- file.path(
-    paste0(
-      "./counts/",
-      study_num,
-      "/",
-      sample_id,
-      "_solo_out/Solo.out/GeneFull/raw"
+.plavisca_root <- local({
+  candidates <- unique(c(
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
+    getwd(),
+    "/home/sopheap/pvsca_b/pre_process_data"
+  ))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
+  if (length(hit) == 0) {
+    stop(
+      "Could not locate the pre_process_data project root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT, the current working ",
+      "directory, and the historical hard-coded path). Set the ",
+      "PLAVISCA_PREPROCESS_ROOT environment variable to the pre_process_data ",
+      "directory's absolute path, or run this script from that directory.",
+      call. = FALSE
     )
-  )
-
-  sce <- read10xCounts(path, col.names = TRUE)
-  assign(sample_id, sce)
-  all_pv[[sample_id]] <- sce
-}
-
-rm(list = samples)
-
-##### --------------------------------------------------------------------------
-##### 4. Processing step 1: select droplets containing cells
-##### --------------------------------------------------------------------------
-# We will now process the *P. vivax* mixed blood stage parasite data.
-# Note: When running Kallisto Bustools, we generated both an unfiltered
-# countmatrix. This means that we need to run a droplet detection step to
-# select droplets containing cells versus droplets did not capture any cells or
-# droplets that captured ambient RNA
-
-# Since we are interested in assessing changes in protein-coding transcripts,
-# we can remove rRNA from the dataset.
-
-for (i in 1:length(all_pv)) {
-  all_pv[[i]] <- all_pv[[i]][!rownames(all_pv[[i]]) %in% rRNA_pv$ID, ]
-}
-# Let's now generate a 'knee plot' to visualize the distribution of RNA per cell.
-# This provides a nice visual for determining droplet-containing versus
-# empty versus ambient RNA containing cells.
-# Visualizes the inflection point to filter empty droplets
-
-# Create the PDF file
-pdf(paste0(study_num, "_knee_plots.pdf"), width = 12, height = 6)
-par(mfrow = c(1, 2))
-
-bcrank <- list()
-uniq <- list()
-
-for (i in seq_along(all_pv)) {
-  bcrank[[i]] <- barcodeRanks(all_pv[[i]])
-  uniq[[i]] <- !duplicated(bcrank[[i]]$rank)
-
-  plot(
-    bcrank[[i]]$rank[uniq[[i]]],
-    bcrank[[i]]$total[uniq[[i]]],
-    log = "xy",
-    xlab = "Rank",
-    ylab = "Total UMI Count",
-    cex.lab = 1.2,
-    main = names(all_pv)[i]
-  )
-
-  abline(h = metadata(bcrank[[i]])$inflection, col = "darkgreen", lty = 2)
-  abline(h = metadata(bcrank[[i]])$knee, col = "dodgerblue", lty = 2)
-  legend(
-    "bottomleft",
-    legend = c("Inflection", "Knee"),
-    col = c("darkgreen", "dodgerblue"),
-    lty = 2,
-    cex = 1.2
-  )
-
-  # Start new page after every 2 plots
-  if (i %% 2 == 0 && i < length(all_pv)) {
-    par(mfrow = c(1, 2))
   }
-}
-
-dev.off()
-
-rm(bcrank, uniq)
-
-# Another option is to use the emptyDrops.
-# emptyDrops performs Monte Carlo simulations to compute p-values, so we need to
-# set the seed to obtain reproducible results.
-# see PMID: 30902100 for  rationale and statistical framework underlying this
-# method
-# set.seed(123456)
-# all_pv <- lapply(all_pv, function(x) {
-#   e.out <- emptyDrops(x, lower = 1) #change this value if needed
-#   x <- x[, which(e.out$FDR <= 0.001)]
-# })
+  normalizePath(hit[[1]])
+})
+setwd(.plavisca_root)
+source("scripts/pipeline_lib.R")
 
 ##### --------------------------------------------------------------------------
-##### 5. Processing step 2: conversion of dgCMatrix to a Seurat object
+##### 2. Load the author-derived expression source and build the validated
+##### author-cell-id -> PlaViSca-cell-id crosswalk (51inf->612, 52inf->610,
+##### 91inf->611, 92inf->609 - see audit/ruberto2022_1/AUDIT.md and
+##### author_matrix_validation/cell_crosswalk_validation.tsv).
 ##### --------------------------------------------------------------------------
-# There are various tools
-# available to process and analyze single-cell RNA-seq data. The Seurat suite
-# https://satijalab.org/seurat/ is one of the most popular thanks to its regular
-# updates, its ease of use, and streamlined data handling and processing
-# commands. In what follows, we will follow the standard steps for handling,
-# processing, visualizing, and comparing data in the Seurat suite
-# (https://satijalab.org/seurat/articles/pbmc3k_tutorial).
+study_num <- "36093191"
 
-# Let's now transform the data in to a Seurat object.
-
-for (i in 1:length(all_pv)) {
-  sce <- all_pv[[i]]
-  mat <- counts(sce)
-  all_pv[[i]] <- CreateSeuratObject(
-    counts = mat,
-    min.cells = 0,
-    min.features = 0
-  )
-}
-
-
-# Note the use of the min.cells and min.features aruguments in the
-# CreateSeuratObject function. What do these arguments do?
-# In the console run '?CreateSeuratObject' to access the description of the
-# function and its arugments.
-# After transforming the data, check out the dimensions of the new Seurat object.
-# How has the noumber of cells and the number of features changed?
-
-# Add metadata. Note: the same will need to be done for the other samples that we analyze.
-study_pmid <- rep(study_num, length(all_pv))
-run_id <- paste0("SRR19573", 609:612)
-study_label <- rep("Ruberto2022_1", length(all_pv))
-num_srr <- rep(4, length(all_pv))
-pub_year <- rep(2022, length(all_pv))
-geographic_location <- rep("Cambodia_Mondulkiri", length(all_pv))
-sc_technology <- rep("10x_Chomium_V3", length(all_pv))
-sequencer <- rep("HiSeq X Ten", length(all_pv))
-host_species <- rep("Homo sapiens", length(all_pv))
-host_id <- rep("BioIVT:BGW", length(all_pv))
-sample_type <- rep("Mammalian host: hepatocyte", length(all_pv))
-strain <- rep("Cambodia field isolate", length(all_pv))
-day_post_infection <- c(9, 5, 9, 5)
-treatment <- c("MMV390048", "No_Treatment", "MMV390048", "No_Treatment")
-biological_replicate <- c(2, 2, 1, 1)
-
-for (i in 1:length(all_pv)) {
-  all_pv[[i]]$study_pmid <- paste0(study_pmid[[i]])
-  all_pv[[i]]$run_id <- paste0(run_id[[i]])
-  all_pv[[i]]$study_label <- paste0(study_label[[i]])
-  all_pv[[i]]$num_srr <- paste0(num_srr[[i]])
-  all_pv[[i]]$pub_year <- paste0(pub_year[[i]])
-  all_pv[[i]]$geographic_location <- paste0(geographic_location[[i]])
-  all_pv[[i]]$sc_technology <- paste0(sc_technology[[i]])
-  all_pv[[i]]$sequencer <- paste0(sequencer[[i]])
-  all_pv[[i]]$host_species <- paste0(host_species[[i]])
-  all_pv[[i]]$host_id <- paste0(host_id[[i]])
-  all_pv[[i]]$sample_type <- paste0(sample_type[[i]])
-  all_pv[[i]]$strain <- paste0(strain[[i]])
-  all_pv[[i]]$day_post_infection <- paste0(day_post_infection[[i]])
-  all_pv[[i]]$treatment <- paste0(treatment[[i]])
-  all_pv[[i]]$biological_replicate <- paste0(biological_replicate[[i]])
-
-  all_pv[[i]]$barcode <- paste(
-    str_extract(all_pv[[i]]$run_id, "\\d{3}$"),
-    "_",
-    colnames(all_pv[[i]]),
-    sep = ""
-  )
-  colnames(all_pv[[i]]) <- all_pv[[i]]$barcode
-}
-
-##### --------------------------------------------------------------------------
-##### 6. Processing step 3: data normalization, variable selection, scaling
-##### and dimension reduction
-##### --------------------------------------------------------------------------
-# The next step is to normalize the data. At the moment, the only information
-# in the Seurat object is 'count' data. In order to facilitate downstream
-# analysis, we will want to normalize the data. In Seurat, the default is
-# By default,a global-scaling normalization method “LogNormalize” is employed.
-# This step normalizes the feature expression measurements for each cell by the
-# total expression, multiplies this by a scale factor (10,000 by default), and
-# log-transforms the result.
-# In Seurat v5, normalized values are stored in <name_of_seurat_object>[["RNA"]]$data
-# Next, we will calculate a subset of features that exhibit high cell-to-cell
-# variation in the dataset (i.e, they are highly expressed in some cells, and
-# lowly expressed in others). Focusing on these genes in downstream analysis
-# helps to highlight biological signal in single-cell datasets (PMID: 24056876
-
-#for (i in 1:length(all_pv)) {
-#  all_pv[[i]] <- NormalizeData(all_pv[[i]], verbose = FALSE)
-#  all_pv[[i]] <- FindVariableFeatures(all_pv[[i]], selection.method = "vst",
-#                                      nfeatures = nrow(all_pv[[i]])*.3,
-#                                      verbose = FALSE)
-#}
-
-##### --------------------------------------------------------------------------
-##### 7. Processing step 4: integration, re-normalization, scaling and data red
-##### --------------------------------------------------------------------------
-
-# Next, we will inegtate the data and apply a linear transformation (‘scaling’) that is a standard
-# pre-processing step prior to dimensional reduction techniques like PCA.
-# The ScaleData() function:
-#  - Shifts the expression of each gene, so that the mean expression across cells is 0
-#  - Scales the expression of each gene, so that the variance across cells is 1
-# This step gives equal weight in downstream analyses, so that highly-expressed
-# genes do not dominate
-# The results of this are stored in <name_of_seurat_object>[["RNA"]]$scale.data
-# By default, only variable features are scaled. You can specify the features
-# argument to scale additional features. Since the # of transcripts detected is
-# relatively low, we will scale the entire dataset.
-# Next we perform PCA on the scaled data. By default, only the previously
-# determined variable features are used as input, but can be defined using
-# features argument if you wish to choose a different subset (if you do want to
-# use a custom subset of features, make sure you pass these to ScaleData first).
-# For the first principal components, Seurat outputs a list of genes with the
-# most positive and negative loadings, representing modules of genes that
-# exhibit either correlation (or anti-correlation) across single-cells in the
-# dataset.
-
-pv.combined.all <- Reduce(function(x, y) merge(x, y = y), all_pv)
-
-pv.combined.all <- JoinLayers(pv.combined.all)
-
-# pv.combined.all <- NormalizeData(pv.combined.all)
-# pv.combined.all <- FindVariableFeatures(pv.combined.all, selection.method = "vst",
-# 										nfeatures = nrow(pv.combined.all) * 0.3)
-# pv.combined.all <- ScaleData(pv.combined.all)
-# pv.combined.all <- RunPCA(pv.combined.all)
-
-# Load label from ruberto2022_1 study
 Hep59.1.2.seu <- readRDS("data/Hep59.1.2.seu_20aug2025.rds")
 
-cells_to_subset <- data.frame(
-  cells = rownames(Hep59.1.2.seu@meta.data),
-  liverForm = Hep59.1.2.seu@meta.data$LiverForm
+author_crosswalk <- data.frame(
+  author_cell_id = rownames(Hep59.1.2.seu@meta.data),
+  liver_form = Hep59.1.2.seu@meta.data$LiverForm
 ) |>
   mutate(
-    cells_name = sub(".*_", "", cells),
-    cells_num = sub("_.*", "", cells),
-    new_cells = case_when(
+    cells_name = sub(".*_", "", author_cell_id),
+    cells_num = sub("_.*", "", author_cell_id),
+    run_suffix = case_when(
       cells_num == "51inf" ~ "612",
       cells_num == "52inf" ~ "610",
       cells_num == "91inf" ~ "611",
       cells_num == "92inf" ~ "609"
     ),
-    new_cells_name = paste0(new_cells, "_", cells_name)
-  ) |>
-  select(cells = new_cells_name, liverForm)
+    plavisca_cell_id = paste0(run_suffix, "_", cells_name)
+  )
 
-# subset base on cells in Hep59.1.2.seu
-pv.combined.all <- subset(
+if (nrow(author_crosswalk) != 1438L) {
+  pipeline_fail(sprintf("Hep59.1.2.seu has %d cells, expected exactly 1438", nrow(author_crosswalk)))
+}
+assert_unique_cell_ids(author_crosswalk$author_cell_id, label = "author_crosswalk$author_cell_id")
+assert_unique_cell_ids(author_crosswalk$plavisca_cell_id, label = "author_crosswalk$plavisca_cell_id")
+if (anyNA(author_crosswalk$run_suffix)) {
+  pipeline_fail("author_crosswalk contains an author cell-ID prefix that did not map to a known run (51inf/52inf/91inf/92inf)")
+}
+rownames(author_crosswalk) <- author_crosswalk$plavisca_cell_id
+
+##### --------------------------------------------------------------------------
+##### 3. Per-run metadata (D038,D039,D069 fixes, unchanged from Phase 1): four
+##### source libraries/runs (SRR19573609-612), two biological replicates x two
+##### treatment arms. These are per-run CONSTANTS, not derived from any count
+##### matrix, so they are assigned directly to the final 1,438-cell population
+##### via a keyed join on run_suffix - no STARsolo object required to compute
+##### them.
+##### --------------------------------------------------------------------------
+run_table <- data.frame(
+  run_suffix = c("609", "610", "611", "612"),
+  run_id = c("SRR19573609", "SRR19573610", "SRR19573611", "SRR19573612"),
+  study_pmid = study_num,
+  study_label = STUDY_LABELS[["ruberto2022_1"]],
+  pub_year = 2022,
+  parasite_origin_location = "Cambodia_Mondulkiri",
+  # D038,D069: corrected spelling; V3 chemistry not independently confirmed
+  # for this study, so left unqualified.
+  sc_technology = "10x_Chromium",
+  sequencer_registered = "HiSeq X Ten",
+  host_species = "Homo sapiens",
+  host_taxid = 9606L,
+  donor_id = "BioIVT:BGW",
+  sample_type = "Mammalian host: hepatocyte",
+  tissue_or_sample_type = "Host liver",
+  strain = "Cambodia field isolate",
+  day_post_infection = c(9, 5, 9, 5),
+  # D039: "No_Treatment" is already the correct current-script value (the
+  # deployed "None" string is stale/historical drift, not reproduced here).
+  source_treatment = c("MMV390048", "None", "MMV390048", "None"),
+  treatment = c("MMV390048", "No_Treatment", "MMV390048", "No_Treatment"),
+  # Four source libraries = two biological replicates x two treatment arms,
+  # explicitly identified (not just implied by run order).
+  biological_replicate_id = c("2", "2", "1", "1"),
+  biological_replicate_type = "infection",
+  stringsAsFactors = FALSE
+)
+assert_keyed_join(author_crosswalk$run_suffix, run_table$run_suffix, label = "run_suffix")
+
+metadata_df <- author_crosswalk |>
+  left_join(run_table, by = "run_suffix") |>
+  mutate(
+    barcode = plavisca_cell_id,
+    host_id = donor_id, # retained for backward compatibility with existing app schema
+    source_life_cycle_stage = liver_form,
+    source_stage_provenance = "source_selection_defined"
+  )
+rownames(metadata_df) <- metadata_df$plavisca_cell_id
+
+##### --------------------------------------------------------------------------
+##### 4. Adopt the complete author-derived raw UMI matrix for ALL 1,438 cells
+##### (D036/DEC09 project-lead sign-off). Reindex (not just label) the author
+##### RNA counts matrix onto PlaViSca cell IDs, keyed and asserted - never
+##### positional.
+##### --------------------------------------------------------------------------
+author_counts_full <- GetAssayData(Hep59.1.2.seu, assay = "RNA", layer = "counts")
+author_counts <- author_counts_full[, author_crosswalk[author_crosswalk$plavisca_cell_id, "author_cell_id"], drop = FALSE]
+colnames(author_counts) <- author_crosswalk$plavisca_cell_id
+
+if (any(author_counts@x < 0) || any(author_counts@x != round(author_counts@x))) {
+  pipeline_fail("author RNA counts layer contains non-integer or negative values - refusing to adopt as raw UMI counts")
+}
+
+# Feature-space handling (Phase 2 spec Part 5/6): zero-fill ONLY the PlaViSca
+# features explicitly classified not_part_of_author_reference in
+# audit/ruberto2022_1/phase2_feature_coverage.tsv - never a blanket
+# zero-pad. That table documents, per feature, why it is absent from the
+# author matrix (author-side protein_coding_gene-only reference filter,
+# PlasmoDB-51 vs PlasmoDB-68 annotation growth); see the table for evidence.
+# The PlaViSca feature panel is taken directly from that coverage table
+# (built once, from the pre-Phase-2 ruberto2022_1.rds feature set, which is
+# identical across all STARsolo-derived studies' shared reference).
+feature_coverage <- read.delim("audit/ruberto2022_1/phase2_feature_coverage.tsv", stringsAsFactors = FALSE)
+plavisca_features <- feature_coverage$plavisca_feature
+if (!all(rownames(author_counts) %in% plavisca_features)) {
+  pipeline_fail("author RNA counts matrix contains feature IDs absent from the PlaViSca feature panel in phase2_feature_coverage.tsv")
+}
+zero_fill_features <- feature_coverage$plavisca_feature[feature_coverage$classification == "not_part_of_author_reference"]
+non_author_features <- setdiff(plavisca_features, rownames(author_counts))
+if (!setequal(non_author_features, zero_fill_features)) {
+  pipeline_fail("zero-filled feature set does not exactly match the audited not_part_of_author_reference feature list in phase2_feature_coverage.tsv")
+}
+
+full_counts <- Matrix::Matrix(
+  0,
+  nrow = length(plavisca_features), ncol = nrow(author_crosswalk),
+  dimnames = list(plavisca_features, author_crosswalk$plavisca_cell_id),
+  sparse = TRUE
+)
+full_counts[rownames(author_counts), ] <- author_counts
+
+##### --------------------------------------------------------------------------
+##### 5. Assemble the final Seurat object directly from the adopted counts
+##### and the keyed metadata table (no STARsolo-derived shell object).
+##### --------------------------------------------------------------------------
+pv.combined.all <- CreateSeuratObject(
+  counts = full_counts,
+  meta.data = metadata_df[colnames(full_counts), setdiff(colnames(metadata_df), c("author_cell_id", "cells_name", "cells_num", "run_suffix", "plavisca_cell_id")), drop = FALSE] # Phase 2 fix: liver_form must be RETAINED - singleR.R Part 5c reads it to set harmonized_life_cycle_stage precedence for this study
+)
+# The adopted counts are raw UMI counts, not author-normalized values (the
+# author RNA$data/SCT slots are explicitly NOT used - see Phase 2 spec Part
+# 3). 'data' starts identical to 'counts'; integration.R performs its own
+# NormalizeData() from 'counts' regardless.
+pv.combined.all <- SetAssayData(pv.combined.all, assay = "RNA", layer = "data", new.data = full_counts)
+
+# Explicit count provenance (Phase 2 spec Part I.4), populated for every one
+# of the 1,438 cells (all now share the same adopted source).
+pv.combined.all <- set_count_provenance(
   pv.combined.all,
-  cells = cells_to_subset$cells
+  source_of_counts = "author_processed_object_raw_umi",
+  counting_pipeline = "kallisto_bustools",
+  count_reference_version = "PlasmoDB-51_PvivaxP01_AnnotatedTranscripts",
+  count_provenance_status = "computationally_validated_zenodo_byte_identity_unconfirmed"
+)
+pv.combined.all$count_source_rds_filename <- "Hep59.1.2.seu_20aug2025.rds"
+pv.combined.all$count_source_rds_sha256 <- tryCatch(
+  as.character(openssl::sha256(file("data/Hep59.1.2.seu_20aug2025.rds", raw = TRUE))),
+  error = function(e) digest::digest(file = "data/Hep59.1.2.seu_20aug2025.rds", algo = "sha256")
 )
 
-# subset cells column
-barcode <- data.frame(cells = pv.combined.all$barcode)
+# total_umi_count/near_empty_expression_flag describe the ADOPTED (author)
+# counts - this is the field singleR.R and other downstream QC consult, so
+# it must reflect the counts actually used.
+adopted_total_umi <- Matrix::colSums(full_counts)
+pv.combined.all$total_umi_count <- adopted_total_umi
+pv.combined.all$near_empty_expression_flag <- adopted_total_umi <= 1
 
-LiverForm <- left_join(barcode, cells_to_subset, by = "cells")
+##### --------------------------------------------------------------------------
+##### 6. Historical/diagnostic-only comparison (D036 characterization): reuse
+##### the pre-Phase-2 STARsolo-derived per-cell UMI totals for these exact
+##### 1,438 cells directly from this study's existing (about-to-be-replaced)
+##### output object, rather than re-deriving them from the raw STARsolo
+##### barcode space. These fields are NEVER used for QC/eligibility gating
+##### downstream (see legacy_starsolo_* notes in metadata_schema.tsv) - only
+##### for the Part VI old-vs-new audit comparison. If no prior build exists
+##### (e.g. a from-scratch checkout that has never produced ruberto2022_1.rds
+##### before), the comparison is explicitly marked unavailable rather than
+##### silently recomputed from a different, unaudited source.
+##### --------------------------------------------------------------------------
+legacy_path <- "ruberto2022_1.rds"
+if (file.exists(legacy_path)) {
+  legacy <- tryCatch(readRDS(legacy_path), error = function(e) NULL)
+  has_legacy_fields <- !is.null(legacy) &&
+    all(c("total_umi_count", "near_empty_expression_flag") %in% colnames(legacy@meta.data)) &&
+    setequal(colnames(legacy), colnames(pv.combined.all))
+  if (has_legacy_fields) {
+    legacy_meta <- legacy@meta.data[colnames(pv.combined.all), , drop = FALSE]
+    pv.combined.all$legacy_starsolo_total_umi_count <- legacy_meta$total_umi_count
+    pv.combined.all$legacy_starsolo_near_empty_flag <- legacy_meta$near_empty_expression_flag
+  } else {
+    warning("ruberto2022_1.rds exists but is not a recognizable pre-Phase-2 STARsolo build (missing fields or cell-set mismatch) - legacy_starsolo_* fields set to NA")
+    pv.combined.all$legacy_starsolo_total_umi_count <- NA_real_
+    pv.combined.all$legacy_starsolo_near_empty_flag <- NA
+  }
+} else {
+  warning("No pre-existing ruberto2022_1.rds found - legacy_starsolo_* historical comparison fields set to NA (the frozen D036 record remains in audit/ruberto2022_1/, independent of this field)")
+  pv.combined.all$legacy_starsolo_total_umi_count <- NA_real_
+  pv.combined.all$legacy_starsolo_near_empty_flag <- NA
+}
 
-# Add liverForm to the metadata
-pv.combined.all@meta.data$liver_form <- LiverForm$liverForm
+##### --------------------------------------------------------------------------
+##### 7. Final assertions and save
+##### --------------------------------------------------------------------------
+# Conservative membership policy (unchanged by Phase 2): preserve the exact
+# 1,438-cell population, including all 538 previously-flagged
+# replicate-2 cells - do not exclude them; they now carry real
+# author-derived expression instead of a near-empty artifact.
+assert_cell_count(ncol(pv.combined.all), 1438L, label = "ruberto2022_1.rds")
+assert_unique_cell_ids(colnames(pv.combined.all), label = "ruberto2022_1.rds colnames")
+
+n_legacy_near_empty <- sum(pv.combined.all$legacy_starsolo_near_empty_flag, na.rm = TRUE)
+n_adopted_near_empty <- sum(pv.combined.all$near_empty_expression_flag)
+if (!anyNA(pv.combined.all$legacy_starsolo_near_empty_flag) && n_legacy_near_empty != 538L) {
+  warning(sprintf(
+    "legacy_starsolo_near_empty_flag count is %d, expected 538 per D036 audit evidence - re-check the historical STARsolo record before trusting this build",
+    n_legacy_near_empty
+  ))
+}
+cat(sprintf(
+  "Phase 2 Ruberto2022_1: %d/%d cells were STARsolo-near-empty (legacy, superseded); %d/%d cells are near-empty under the newly adopted author counts.\n",
+  n_legacy_near_empty, ncol(pv.combined.all), n_adopted_near_empty, ncol(pv.combined.all)
+))
 
 # Save Seurat object
 saveRDS(pv.combined.all, file = "ruberto2022_1.rds")
+record_build_manifest(
+  artifact_path = "ruberto2022_1.rds",
+  script_path = "scripts/ruberto2022_1_pv_analysis_script.R",
+  cell_count = ncol(pv.combined.all),
+  notes = sprintf(
+    "PHASE 2: D036/DEC09 resolved - adopted author kallisto/bustools raw UMI counts (Hep59.1.2.seu_20aug2025.rds) for all 1438 cells, replacing the STARsolo reconstruction; %d/2089 zero-filled reference-absent features; %d cells near-empty under legacy STARsolo (historical), %d cells near-empty under adopted author counts. STARsolo raw barcode space was not re-read (cell membership and metadata are fully determined by the author crosswalk and per-run constants); legacy comparison fields sourced from the prior build's own output.",
+    length(zero_fill_features), n_legacy_near_empty, n_adopted_near_empty
+  )
+)
 
 # Remove all object
 rm(list = ls())

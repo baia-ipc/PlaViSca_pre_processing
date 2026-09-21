@@ -5,7 +5,17 @@ name = "pre_process_data"
 platforms = ["linux-64"]
 version = "0.1.0"
 
+[activation]
+# bioconda's Bioconductor "data" recipes (bioconductor-genomeinfodbdata)
+# fetch their actual payload via a conda post-link.sh hook, which pixi does
+# not execute - see scripts/setup/ensure_bioc_data_packages.sh for the full
+# explanation. This activation script reproduces that install step
+# idempotently so `pixi run` always has a working R library/GenomeInfoDb/
+# rtracklayer/DropletUtils stack without a separate manual setup step.
+scripts = ["setup/ensure_bioc_data_packages.sh"]
+
 [tasks]
+test-env = "Rscript --vanilla tests/test_environment.R"
 
 [dependencies]
 r-base = "4.3.*"
@@ -18,3 +28,7 @@ bioconductor-rtracklayer = "*"
 bioconductor-genomeinfodbdata = "*"
 bioconductor-singler = "*"
 r-sccustomize = ">=3.2.0,<4"
+r-harmony = "*"
+r-readxl = "*"
+r-janitor = "*"
+r-mclust = "*"

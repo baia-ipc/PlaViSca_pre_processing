@@ -4,7 +4,7 @@ options(stringsAsFactors = FALSE)
 suppressPackageStartupMessages(library(Seurat))
 
 repo <- normalizePath(getwd())
-candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", "/home/baia/prj/plavisca/pre_process_data")
+candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", repo)
 out_path <- file.path(repo, "audit/mancio_silva2022/sa2020_authoritative_cell_lineage.tsv")
 
 study <- readRDS(file.path(candidate_root, "sa2020.rds"))

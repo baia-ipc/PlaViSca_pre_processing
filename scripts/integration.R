@@ -52,6 +52,30 @@ files <- c(
 
 pv.combined.all <- lapply(files, readRDS)
 
+# Final DEC01/DEC02 release membership gate.  Assert every per-study object
+# before merge so an unexpected membership change cannot be hidden inside the
+# atlas-wide total.
+expected_study_cells <- c(
+    hazzard2022.rds = 3294L,
+    hazzard2024.rds = 80024L,
+    ruberto2022_1.rds = 1438L,
+    ruberto2022_2.rds = 9947L,
+    sa2020.rds = 9766L,
+    silva2022.rds = 1480L
+)
+for (i in seq_along(files)) {
+    assert_cell_count(
+        ncol(pv.combined.all[[i]]),
+        expected_study_cells[[files[[i]]]],
+        label = paste0(files[[i]], " pre-integration")
+    )
+}
+assert_cell_count(
+    sum(vapply(pv.combined.all, ncol, numeric(1))),
+    105949L,
+    label = "six-study pre-integration total"
+)
+
 # ============================================================================
 # Phase 2 Part 6: integration feature universe. Capture each study's own
 # feature panel BEFORE merge() zero-pads everything to the union - merging

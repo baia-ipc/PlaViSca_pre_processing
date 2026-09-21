@@ -5,28 +5,26 @@ library(Seurat)
 library(tidyverse)
 library(janitor)
 
-.plavisca_project_root <- local({
+.plavisca_preprocess_root <- local({
   candidates <- unique(c(
-    Sys.getenv("PLAVISCA_PROJECT_ROOT", unset = NA_character_),
+    Sys.getenv("PLAVISCA_PREPROCESS_ROOT", unset = NA_character_),
     getwd(),
-    "/home/sopheap/pvsca_b"
+    file.path(getwd(), "pre_process_data"),
+    "/home/sopheap/pvsca_b/pre_process_data"
   ))
   candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
-  hit <- candidates[file.exists(file.path(candidates, "pre_process_data", "scripts", "pipeline_lib.R"))]
+  hit <- candidates[file.exists(file.path(candidates, "scripts", "pipeline_lib.R"))]
   if (length(hit) == 0) {
     stop(
-      "Could not locate the PlaViSca project root (looked for pre_process_data/",
-      "scripts/pipeline_lib.R under $PLAVISCA_PROJECT_ROOT, the current working ",
-      "directory, and the historical hard-coded path). Set the ",
-      "PLAVISCA_PROJECT_ROOT environment variable to the directory containing ",
-      "both pre_process_data/ and PlaViSca/.",
+      "Could not locate the preprocessing root (looked for scripts/",
+      "pipeline_lib.R under $PLAVISCA_PREPROCESS_ROOT and known locations).",
       call. = FALSE
     )
   }
   normalizePath(hit[[1]])
 })
-setwd(.plavisca_project_root)
-source("pre_process_data/scripts/pipeline_lib.R")
+setwd(.plavisca_preprocess_root)
+source("scripts/pipeline_lib.R")
 
 # Section 13 (do not overwrite production artifacts): every export in this
 # script writes to a clearly separated candidate/staging location, never
@@ -34,16 +32,20 @@ source("pre_process_data/scripts/pipeline_lib.R")
 # candidate export to the deployed location is a deliberate, separate,
 # reviewed Phase 2 action - never an automatic side effect of running this
 # script.
-candidate_dir <- "pre_process_data/data/candidate_export"
+candidate_dir <- "data/candidate_export"
 dir.create(candidate_dir, showWarnings = FALSE, recursive = TRUE)
 
 # load gff data (fixes the historical "./ref/..." path, which assumed a
 # personal layout where ref/ lived directly under the project root; it
 # actually ships inside the PlaViSca app repo)
-gff_data <- readRDS("PlaViSca/ref/PvivaxP01_gff_data.rds")
+gff_path <- Sys.getenv(
+  "PLAVISCA_GFF_DATA",
+  file.path(dirname(.plavisca_preprocess_root), "PlaViSca/ref/PvivaxP01_gff_data.rds")
+)
+gff_data <- readRDS(gff_path)
 
 # load seurat object
-so <- readRDS("pre_process_data/pv_all_studies.rds")
+so <- readRDS("pv_all_studies.rds")
 
 # D053: capture metadata column names AFTER clean_names(), not before - the
 # original bug captured `metadata` from the raw Seurat column names, then
@@ -73,6 +75,24 @@ mr_data <- FetchData(
 ) %>%
   clean_names()
 
+# Seurat may generate a reduction key for UMAP when none is supplied; that key
+# is not a stable semantic API (for example `cnqwt_` in one build and `jlcfk_`
+# in another). Rename embeddings from the reduction-derived column vectors,
+# never from a previously observed random key.
+embedding_source_names <- janitor::make_clean_names(c(umap_int, umap, pca_int, pca, tsne))
+embedding_target_names <- c(
+  paste0("umap_i_", seq_along(umap_int)),
+  paste0("umap_u_", seq_along(umap)),
+  paste0("pca_i_", seq_along(pca_int)),
+  paste0("pca_u_", seq_along(pca)),
+  paste0("t_sne_", seq_along(tsne))
+)
+embedding_idx <- match(embedding_source_names, colnames(mr_data))
+if (anyNA(embedding_idx)) {
+  pipeline_fail("Could not resolve every reduction-derived embedding column in mr_data")
+}
+colnames(mr_data)[embedding_idx] <- embedding_target_names
+
 # D053 fix continued: metadata names re-derived from the post-clean_names()
 # columns that actually exist in mr_data, by cleaning the same raw name
 # vector the same way clean_names() would - this is what any_of(metadata)
@@ -96,22 +116,7 @@ internal_only_columns <- c(
   grep("snn", colnames(mr_data), value = TRUE)
 )
 
-mr_data <- mr_data %>%
-  dplyr::rename(
-    umap_i_1 = cnqwt_1,
-    umap_i_2 = cnqwt_2,
-    umap_i_3 = cnqwt_3,
-    umap_u_1 = umap_1,
-    umap_u_2 = umap_2,
-    umap_u_3 = umap_3,
-    pca_i_1 = harmony_1,
-    pca_i_2 = harmony_2,
-    pca_i_3 = harmony_3,
-    pca_u_1 = pc_1,
-    pca_u_2 = pc_2,
-    pca_u_3 = pc_3
-  ) %>%
-  select(-any_of(internal_only_columns))
+mr_data <- mr_data %>% select(-any_of(internal_only_columns))
 
 # AT17 release closure: one canonical cell order for every cell-indexed app
 # export. The expression exports have always used lexicographically sorted
@@ -305,7 +310,7 @@ save_data <- list(
 saveRDS(save_data, file.path(candidate_dir, "cleaned_dataset.rds"))
 record_build_manifest(
   artifact_path = file.path(candidate_dir, "cleaned_dataset.rds"),
-  script_path = "pre_process_data/scripts/flatten_data.R",
+  script_path = "scripts/flatten_data.R",
   cell_count = nrow(mr_data),
   notes = "Fixes D052,D053,D054,D055,D062; candidate/staging export only, deployed PlaViSca/data/*.rds untouched (section 13)"
 )

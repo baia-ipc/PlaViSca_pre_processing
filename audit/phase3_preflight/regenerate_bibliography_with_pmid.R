@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 options(stringsAsFactors = FALSE)
-candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", "/home/baia/prj/plavisca/pre_process_data")
+candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", repo)
 csv_path <- file.path(candidate_root, "data/data_source.csv")
 meta <- readRDS(file.path(candidate_root, "data/candidate_export/cleaned_dataset.rds"))$mr_data
 bib <- read.csv(csv_path, check.names = FALSE)

@@ -4,7 +4,7 @@ options(stringsAsFactors = FALSE)
 suppressPackageStartupMessages(library(Seurat))
 
 repo <- normalizePath(getwd())
-candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", "/home/baia/prj/plavisca/pre_process_data")
+candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", repo)
 so <- readRDS(file.path(candidate_root, "pv_all_studies.rds"))
 
 female_markers <- c(

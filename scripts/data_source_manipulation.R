@@ -109,7 +109,7 @@ Number_of_cells <- c(
   1438,
   3294,
   80024,
-  1494
+  1480
 )
 
 # D067: keyed, fail-loud construction (never a bare cbind of independently

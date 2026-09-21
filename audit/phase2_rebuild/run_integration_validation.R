@@ -29,7 +29,7 @@ source("scripts/pipeline_lib.R")
 so <- readRDS("pv_all_studies.rds")
 meta <- so@meta.data
 
-out_dir <- "audit/phase2_rebuild"
+out_dir <- "audit/phase3_preflight"
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 ## ------------------------------------------------------------------

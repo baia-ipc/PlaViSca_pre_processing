@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-candidate_root=/home/baia/prj/plavisca/pre_process_data
+candidate_root=${PLAVISCA_CANDIDATE_ROOT:-$(pwd)}
 
 sha256sum \
   "$candidate_root/pv_all_studies.rds" \

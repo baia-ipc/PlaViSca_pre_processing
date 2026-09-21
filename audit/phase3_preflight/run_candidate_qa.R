@@ -3,7 +3,7 @@
 options(stringsAsFactors = FALSE)
 
 repo <- normalizePath(getwd())
-candidate_root <- "/home/baia/prj/plavisca/pre_process_data"
+candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", repo)
 candidate_dir <- file.path(candidate_root, "data", "candidate_export")
 out_dir <- file.path(repo, "audit", "phase3_preflight")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)

@@ -2,7 +2,7 @@
 
 options(stringsAsFactors = FALSE)
 
-candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", "/home/baia/prj/plavisca/pre_process_data")
+candidate_root <- Sys.getenv("PLAVISCA_CANDIDATE_ROOT", repo)
 candidate_dir <- file.path(candidate_root, "data/candidate_export")
 cleaned_path <- file.path(candidate_dir, "cleaned_dataset.rds")
 expression_paths <- c(
@@ -14,11 +14,11 @@ expression_paths <- c(
 cleaned <- readRDS(cleaned_path)
 old_mr <- cleaned$mr_data
 canonical_ids <- sort(rownames(old_mr))
-stopifnot(length(canonical_ids) == 105963L, !anyDuplicated(canonical_ids))
+stopifnot(length(canonical_ids) == 105949L, !anyDuplicated(canonical_ids))
 
 for (nm in names(expression_paths)) {
   x <- readRDS(expression_paths[[nm]])
-  stopifnot(nrow(x) == 105963L, !anyDuplicated(rownames(x)), identical(rownames(x), canonical_ids))
+  stopifnot(nrow(x) == 105949L, !anyDuplicated(rownames(x)), identical(rownames(x), canonical_ids))
   rm(x); gc()
 }
 

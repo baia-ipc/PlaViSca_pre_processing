@@ -156,12 +156,31 @@ check_study_object <- function(legacy_path, expected_n, label) {
   })
 }
 
-check_study_object("silva2022.rds", 1494L, "mancio_silva2022")
+check_study_object("silva2022.rds", 1480L, "mancio_silva2022")
 check_study_object("sa2020.rds", 9766L, "sa2020")
 check_study_object("hazzard2022.rds", 3294L, "hazzard2022")
 check_study_object("hazzard2024.rds", 80024L, "hazzard2024")
 check_study_object("ruberto2022_1.rds", 1438L, "ruberto2022_1")
 check_study_object("ruberto2022_2.rds", 9947L, "ruberto2022_2")
+
+run_test("AT14-DEC01-DEC02", "Final duplicate-policy membership and metadata", function() {
+  so <- readRDS(file.path(candidate_study_dir, "silva2022.rds"))
+  dec01 <- read.delim("audit/mancio_silva2022/dec01_removed_duplicate_cells.tsv", stringsAsFactors = FALSE)
+  d5 <- c("D5Seq1_CCCCGATTGACG", "D5Seq2_CCCCGATTGACG")
+  stopifnot(
+    nrow(dec01) == 14L,
+    !anyDuplicated(dec01$removed_cell_id),
+    all(grepl("\\.1$", dec01$removed_cell_id)),
+    all(dec01$decision_id == "DEC01"),
+    !any(dec01$removed_cell_id %in% colnames(so)),
+    all(dec01$retained_counterpart %in% colnames(so)),
+    all(d5 %in% colnames(so)),
+    !any(grepl("d5.*duplicate|duplicate.*d5|suspicion", colnames(so@meta.data), ignore.case = TRUE))
+  )
+  d5_meta <- so@meta.data[d5, , drop = FALSE]
+  stopifnot(length(unique(d5_meta$source_orig_ident)) == 2L)
+  stopifnot(length(unique(d5_meta$run_id)) == 2L)
+})
 
 ruberto1_candidate <- file.path(candidate_study_dir, "ruberto2022_1.rds")
 if (file.exists(ruberto1_candidate)) {
@@ -239,7 +258,7 @@ cleaned_export_path <- "data/candidate_export/cleaned_dataset.rds"
 normalize_export_path <- "data/candidate_export/normalize_df.rds"
 raw_export_path <- "data/candidate_export/raw_df.rds"
 scale_export_path <- "data/candidate_export/scale_df.rds"
-integration_validation_path <- "audit/phase2_rebuild/integration_validation.tsv"
+integration_validation_path <- "audit/phase3_preflight/integration_validation.tsv"
 
 if (file.exists(atlas_path)) {
   atlas <- readRDS(atlas_path)
@@ -370,11 +389,11 @@ if (file.exists(integration_validation_path)) {
   })
 } else {
   for (id in c("AT24", "AT25", "AT26", "AT27")) {
-    skip_test(id, "Integration validation metric", "requires audit/phase2_rebuild/integration_validation.tsv")
+    skip_test(id, "Integration validation metric", "requires audit/phase3_preflight/integration_validation.tsv")
   }
 }
 
-reproducibility_path <- "audit/phase2_rebuild/reproducibility_check.tsv"
+reproducibility_path <- "audit/phase3_preflight/reproducibility_check.tsv"
 if (file.exists(reproducibility_path)) {
   run_test("AT29-AT30", "Reproducibility/stability check table exists and reports no undocumented instability", function() {
     tbl <- read.delim(reproducibility_path, stringsAsFactors = FALSE)
@@ -382,7 +401,7 @@ if (file.exists(reproducibility_path)) {
   })
 } else {
   for (id in c("AT29", "AT30")) {
-    skip_test(id, "Reproducibility/stability check", "requires audit/phase2_rebuild/reproducibility_check.tsv")
+    skip_test(id, "Reproducibility/stability check", "requires audit/phase3_preflight/reproducibility_check.tsv")
   }
 }
 

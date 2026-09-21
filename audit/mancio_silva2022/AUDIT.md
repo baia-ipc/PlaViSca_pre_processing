@@ -1775,3 +1775,22 @@ All files are under `pre_process_data/audit/ruberto2022_2/`; checksums in
 
 No production script, source data, study RDS, integrated object or deployed
 application artifact was changed in this audit.
+
+## PlaViSca v1 final project-lead decisions (DEC01/DEC02)
+
+This section records decisions made after the forensic work above. It does not
+rewrite the historical investigation or imply that these decisions were known
+when that evidence was assembled.
+
+- **DEC01 — remove the 14 proven `.1` representations.** Each removed record
+  traces to the same upstream GEO count column as its retained unsuffixed
+  counterpart. The source/original representation remains in the analytic
+  object. The complete, machine-readable exclusion evidence is preserved in
+  `dec01_removed_duplicate_cells.tsv`. This policy is effective for PlaViSca
+  v1 and changes Mancio-Silva2022 membership from 1,494 to 1,480 cells.
+- **DEC02 — retain both day-5 cells as ordinary distinct observations.**
+  `D5Seq1_CCCCGATTGACG` and `D5Seq2_CCCCGATTGACG` derive from distinct GEO
+  samples and run sets. No provenance evidence establishes that either is a
+  duplicate representation of the other; exact observed expression alone is
+  insufficient for deletion. Both remain, keep their distinct sample/run
+  provenance, and receive no pair-specific duplicate or suspicion flag.

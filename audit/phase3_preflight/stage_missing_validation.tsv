@@ -1,22 +1,8 @@
-cell_id	study_label	total_umi_count	near_empty_expression_flag	dot1_duplicate_flag	source_life_cycle_stage	idc_reference_similarity_label	documented_class
-982_ACAACCAGTAGCACAG	Hazzard2024	9	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-982_AGCTTCCGTAGGTAGC	Hazzard2024	6	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-982_ATCGGATAGACGCATG	Hazzard2024	8	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-982_CAACGATTCCCTCGAT	Hazzard2024	7	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-982_CCCTAACGTTTGACAC	Hazzard2024	5	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-982_GGATGTTCATGACTTG	Hazzard2024	8	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-982_TCCAGAAAGCCTGACC	Hazzard2024	6	FALSE	NA	NA	NA	below_10_UMI_inference_threshold
-D11SEQ100_ATCTCGCAGCGA.1	Mancio-Silva2022	100	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D14SEQ100_TCCGCGAGTAAG.1	Mancio-Silva2022	332	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_ACTCATGAAACG.1	Mancio-Silva2022	1053	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_CAGAGCCGGGGT.1	Mancio-Silva2022	114	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_CCGTCGCTAACA.1	Mancio-Silva2022	1831	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_GGAATCACCACA.1	Mancio-Silva2022	136	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_GGTGCCCGGGGG.1	Mancio-Silva2022	1492	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_GTAACATTCTTA.1	Mancio-Silva2022	108	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_TGCCAGTTTCCA.1	Mancio-Silva2022	322	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_TGTGCTGAGTGA.1	Mancio-Silva2022	877	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D1SEQ100_TTAGCCAAGGAT.1	Mancio-Silva2022	765	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D4Seq1_GCTGAATTTCGG.1	Mancio-Silva2022	620	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D5SEQ100_TCTTCGAGATCC.1	Mancio-Silva2022	692	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
-D5SEQ50_CAAAGGATGTCG.1	Mancio-Silva2022	336	FALSE	TRUE	NA	NA	retained_flagged_dot1_duplicate_without_stage
+cell_id	study_label	total_umi_count	near_empty_expression_flag	source_life_cycle_stage	idc_reference_similarity_label	documented_class
+982_ACAACCAGTAGCACAG	Hazzard2024	9	FALSE	NA	NA	below_10_UMI_inference_threshold
+982_AGCTTCCGTAGGTAGC	Hazzard2024	6	FALSE	NA	NA	below_10_UMI_inference_threshold
+982_ATCGGATAGACGCATG	Hazzard2024	8	FALSE	NA	NA	below_10_UMI_inference_threshold
+982_CAACGATTCCCTCGAT	Hazzard2024	7	FALSE	NA	NA	below_10_UMI_inference_threshold
+982_CCCTAACGTTTGACAC	Hazzard2024	5	FALSE	NA	NA	below_10_UMI_inference_threshold
+982_GGATGTTCATGACTTG	Hazzard2024	8	FALSE	NA	NA	below_10_UMI_inference_threshold
+982_TCCAGAAAGCCTGACC	Hazzard2024	6	FALSE	NA	NA	below_10_UMI_inference_threshold

@@ -45,6 +45,47 @@ silva <- CreateSeuratObject(counts = raw)
 n_cells <- ncol(silva)
 assert_cell_count(n_cells, 1494L, label = "Mancio-Silva2022 source object")
 
+# DEC01 (PlaViSca v1 final): remove only the 14 proven duplicate `.1`
+# representations at the earliest responsible study-object step.  The
+# authoritative removal manifest is derived from the committed forensic trace;
+# it preserves the retained counterpart and upstream GEO-column identity for
+# every exclusion.  These assertions deliberately fail before any downstream
+# metadata or integration work if the evidence and source object diverge.
+dec01 <- read.delim(
+  "audit/mancio_silva2022/dec01_removed_duplicate_cells.tsv",
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
+d5_dec02_cells <- c("D5Seq1_CCCCGATTGACG", "D5Seq2_CCCCGATTGACG")
+
+if (nrow(dec01) != 14L || anyDuplicated(dec01$removed_cell_id)) {
+  pipeline_fail("DEC01 manifest must contain exactly 14 unique removed_cell_id values")
+}
+if (any(dec01$decision_id != "DEC01") ||
+    any(!grepl("\\.1$", dec01$removed_cell_id))) {
+  pipeline_fail("DEC01 manifest contains a non-DEC01 row or a removed ID without the required .1 suffix")
+}
+if (any(dec01$retained_counterpart != sub("\\.1$", "", dec01$removed_cell_id))) {
+  pipeline_fail("Every DEC01 removed ID must map to exactly its unsuffixed retained counterpart")
+}
+if (!all(dec01$removed_cell_id %in% colnames(silva)) ||
+    !all(dec01$retained_counterpart %in% colnames(silva))) {
+  pipeline_fail("DEC01 removed IDs and retained counterparts must all exist in the 1,494-cell source object")
+}
+if (any(d5_dec02_cells %in% dec01$removed_cell_id) ||
+    !all(d5_dec02_cells %in% colnames(silva))) {
+  pipeline_fail("DEC02 D5 cells must both exist and must never occur in the DEC01 removal manifest")
+}
+
+silva <- subset(silva, cells = setdiff(colnames(silva), dec01$removed_cell_id))
+assert_cell_count(ncol(silva), 1480L, label = "Mancio-Silva2022 DEC01-filtered study object")
+if (any(dec01$removed_cell_id %in% colnames(silva)) ||
+    !all(dec01$retained_counterpart %in% colnames(silva)) ||
+    !all(d5_dec02_cells %in% colnames(silva))) {
+  pipeline_fail("DEC01/DEC02 post-removal membership assertions failed")
+}
+n_cells <- ncol(silva)
+
 # ---------------------------------------------------------------------------
 # Keyed source-group/accession crosswalk (fixes D002,D005: no more
 # `rep(paste0("SRR18134", 227:284))` positional recycling; every run/
@@ -56,7 +97,6 @@ run_table <- read.delim(
 )
 
 raw_colnames <- colnames(silva)
-is_dot1_duplicate <- grepl("\\.1$", raw_colnames)
 base_colname <- sub("\\.1$", "", raw_colnames)
 prefix_key <- sub("_[ACGTN]+$", "", base_colname)
 
@@ -123,8 +163,8 @@ silva$source_run_count_retained <- rep(58L, n_cells)
 # ---------------------------------------------------------------------------
 # D008,D009,D010: preserve source cell/barcode provenance exactly, and join
 # State/AP2G/sex-state by an EXACT keyed match on Table S2's Updated_names
-# (all 1494 raw colnames match exactly 1:1; the 14 proven ".1" duplicate
-# records have no Table S2 match by design - see DEC01) rather than the
+# (all 1,480 retained colnames match exactly 1:1; the 14 removed `.1`
+# representations had no Table S2 match by design - see DEC01) rather than the
 # previous fragile grep-prefix matching.
 # ---------------------------------------------------------------------------
 silva$source_cell_id <- raw_colnames
@@ -138,16 +178,11 @@ silva$source_orig_ident <- table_s2$orig.ident[s2_match]
 silva$refine_state <- table_s2$refine_state[s2_match]
 
 # ---------------------------------------------------------------------------
-# D011,D012: explicit duplicate/provenance flags (Phase 1 conservative
-# policy - do NOT remove any cells; preserve flags for the approved
-# Phase-2 policy per DEC01/DEC02)
+# DEC01/DEC02 final policy: all proven `.1` representations have already been
+# removed, while the distinct-source D5 cells are ordinary retained
+# observations.  No cell-level duplicate/suspicion flag is emitted.  The full
+# historical forensic evidence remains in audit/mancio_silva2022/.
 # ---------------------------------------------------------------------------
-silva$dot1_duplicate_flag <- is_dot1_duplicate
-silva$dot1_duplicate_of <- ifelse(is_dot1_duplicate, base_colname, NA_character_)
-
-d5_cross_array_pair <- prefix_key %in% c("D5Seq1", "D5Seq2")
-silva$d5_cross_array_duplicate_flag <- d5_cross_array_pair
-
 silva$source_stage_provenance <- ifelse(
   is.na(silva$refine_state),
   "singleR_inferred",
@@ -178,9 +213,9 @@ silva <- set_count_provenance(
   count_provenance_status = "confirmed_byte_identical_to_zenodo_deposit_md5"
 )
 
-# Conservative Phase 1 membership policy: preserve all 1494 cells, including
-# the 14 proven .1 duplicates and both members of the unresolved D5 pair.
-assert_cell_count(ncol(silva), 1494L, label = "silva2022.rds")
+# Final PlaViSca v1 membership policy: remove exactly the 14 DEC01 duplicate
+# representations and retain both DEC02 D5 distinct-source observations.
+assert_cell_count(ncol(silva), 1480L, label = "silva2022.rds")
 assert_unique_cell_ids(colnames(silva), label = "silva2022.rds colnames")
 assert_no_literal_na_string(silva$study_pmid, label = "silva$study_pmid")
 
@@ -189,5 +224,5 @@ record_build_manifest(
   artifact_path = "silva2022.rds",
   script_path = "scripts/silva.R",
   cell_count = ncol(silva),
-  notes = "Fixes D001-D010,D013; D011/D012 flagged not removed per Phase 1 conservative membership policy (DEC01/DEC02 pending)"
+  notes = "DEC01 final: exactly 14 proven .1 duplicate representations removed with originals retained; DEC02 final: both distinct-source D5 cells retained normally without a duplicate/suspicion flag"
 )

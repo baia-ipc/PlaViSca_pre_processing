@@ -25,7 +25,7 @@ setwd(.plavisca_root)
 source("scripts/pipeline_lib.R")
 
 so <- readRDS("pv_all_studies.rds")
-out_dir <- "audit/phase2_rebuild"
+out_dir <- "audit/phase3_preflight"
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 results <- list()
@@ -130,4 +130,4 @@ write.table(reproducibility_tbl, file.path(out_dir, "reproducibility_check.tsv")
 
 cat("=== Reproducibility/stability check ===\n")
 print(reproducibility_tbl)
-cat("\nWrote audit/phase2_rebuild/reproducibility_check.tsv\n")
+cat("\nWrote audit/phase3_preflight/reproducibility_check.tsv\n")
